@@ -1,241 +1,426 @@
 # Agent Message Capture System
 
-## Overview
+## Why We Need This
 
-The message capture system intercepts all HTTP communication between agents and stores it for monitoring, debugging, and analysis. It operates at the HTTP middleware level to capture both incoming requests and outgoing responses.
-
-## Architecture
-
-```
-User Request → MessageCaptureMiddleware.dispatch() → Agent Handler → Response
-                     ↓
-                 Captures incoming + outgoing
-```
+### The Problem
+When running multiple AI agents that communicate via the A2A protocol, we face a critical visibility gap:
 
 ```
 ┌─────────────┐    ┌─────────────┐    ┌─────────────┐
-│ Tom Agent   │    │ Jerry Agent │    │ Alice Agent │
-│ Middleware  │    │ Middleware  │    │ Middleware  │
+│   Tom AI    │    │  Jerry AI   │    │  Alice AI   │
+│   Agent     │    │   Agent     │    │   Agent     │
 └──────┬──────┘    └──────┬──────┘    └──────┬──────┘
        │                  │                  │
        └──────────────────┼──────────────────┘
                           │
+                    ??? MYSTERIOUS BLACK BOX ???
+                          │
+       ┌──────────────────┼──────────────────┐
+       │                  │                  │
+┌──────▼──────┐    ┌──────▼──────┐    ┌──────▼──────┐
+│   User     │    │   Debug    │    │   Monitor   │
+│   "What    │    │   "Why     │    │   "How     │
+│   are they  │    │   failing?" │    │   busy?"   │
+│   talking   │    │            │    │            │
+│   about?"   │    │            │    │            │
+└─────────────┘    └─────────────┘    └─────────────┘
+```
+
+**Without message capture, we're flying blind:**
+- ❌ No visibility into agent conversations
+- ❌ Impossible to debug communication failures
+- ❌ No way to monitor system performance
+- ❌ Can't analyze agent collaboration patterns
+
+### The Solution
+Intercept HTTP communication at the middleware level to capture, store, and analyze all agent interactions:
+
+```
+┌─────────────┐    ┌─────────────┐    ┌─────────────┐
+│   Tom AI    │    │  Jerry AI   │    │  Alice AI   │
+│   Agent     │    │   Agent     │    │   Agent     │
+└──────┬──────┘    └──────┬──────┘    └──────┬──────┘
+       │                  │                  │
+       └────────┬─────────┼─────────┬────────┘
+                │         │         │
+        ┌───────▼─────┐   │   ┌────▼────┐
+        │   HTTP      │   │   │  HTTP   │
+        │ Middleware  │   │   │Middleware│
+        │   (Tom)     │   │   │ (Jerry) │
+        └───────┬─────┘   │   └────┬────┘
+                │         │         │
+                └─────────┼─────────┘
+                          │
                 ┌─────────▼─────────┐
-                │  MessageCapture   │  ← SINGLE SHARED INSTANCE
-                │   (stores all)     │
-                └───────────────────┘
+                │  MessageCapture   │  ← CENTRAL STORAGE
+                │   (All Messages)  │
+                └─────────┬─────────┘
+                          │
+        ┌─────────────────┼─────────────────┐
+        │                 │                 │
+┌───────▼──────┐   ┌───────▼──────┐   ┌───────▼──────┐
+│   Debug      │   │   Monitor    │   │   Analyze    │
+│   "See       │   │   "Real-time │   │   "Patterns  │
+│   exactly    │   │   activity"  │   │   and stats" │
+│   what       │   │             │   │             │
+│   happened"  │   │             │   │             │
+└──────────────┘   └──────────────┘   └──────────────┘
 ```
 
-## Components
+## How It Works: The Mechanism
 
-### 1. MessageType (Enum)
-Defines the types of messages that can be captured:
-- `USER_INPUT` - User input messages (not used at HTTP level)
-- `AGENT_RESPONSE` - Agent responses
-- `AGENT_TO_AGENT` - A2A protocol messages between agents
-- `SYSTEM_EVENT` - Health checks and system events
-- `ERROR` - Error messages
-- `HTTP_REQUEST` - General HTTP requests
-- `HTTP_RESPONSE` - General HTTP responses
+### 1. HTTP Interception Pattern
 
-### 2. CapturedMessage (Data Container)
-Stores individual message data:
-```python
-@dataclass
-class CapturedMessage:
-    agent_name: str           # Which agent sent/received
-    direction: str            # "incoming" or "outgoing"
-    message_type: MessageType  # Type classification
-    content: str              # Message content
-    timestamp: float          # When captured
-    metadata: Dict            # HTTP headers, method, URL, etc.
-    message_id: str           # Unique identifier
+We use Starlette middleware to intercept every HTTP request/response:
+
+```
+HTTP REQUEST FLOW:
+
+┌─────────────┐    ┌──────────────────┐    ┌─────────────┐
+│   Client     │───▶│   Middleware     │───▶│   Agent     │
+│   Request    │    │   Intercept      │    │   Handler   │
+└─────────────┘    └──────────────────┘    └─────────────┘
+       │                      │                      │
+       │              1. Capture Request           │
+       │              2. Forward to Agent          │
+       │                      │                      │
+       │              3. Capture Response          │
+       │                      │                      │
+┌─────────────┐    ┌──────────────────┐    ┌─────────────┐
+│   Client     │◀───│   Middleware     │◀───│   Agent     │
+│   Response   │    │   Intercept      │    │   Handler   │
+└─────────────┘    └──────────────────┘    └─────────────┘
 ```
 
-### 3. MessageCapture (Storage System)
-Central message storage and retrieval system:
-- **Singleton pattern** - One global instance shared by all agents
-- **Thread-safe** - Uses asyncio.Lock for concurrent access
-- **Memory-limited** - Maintains max_messages limit (default: 10,000)
-- **Filterable** - Query by agent, type, direction, time range
+### 2. Message Classification Logic
 
-### 4. MessageCaptureMiddleware (HTTP Interceptor)
-Starlette middleware that intercepts HTTP traffic:
-- **Per-agent instances** - Each agent has its own middleware with agent_name
-- **Shared storage** - All middleware instances use the same MessageCapture
-- **Non-intrusive** - Doesn't block or modify requests
-- **Body-safe** - Re-injects request body so handlers can read it
+The middleware categorizes traffic based on patterns:
 
-## Message Flow
+```
+CLASSIFICATION DECISION TREE:
 
-### 1. Request Interception
-```python
-async def dispatch(self, request, call_next):
-    # 1. Capture incoming request
-    request_body = await request.body()
-    message_type = self._classify_message(request, request_body)
-    
-    # 2. Store incoming message
-    await self.message_capture.capture(
-        agent_name=self.agent_name,  # "tom", "jerry", or "alice"
-        direction="incoming",
-        message_type=message_type,
-        content=request_body,
-        metadata={"method": request.method, "url": str(request.url), ...}
-    )
+                    ┌─────────────────┐
+                    │  HTTP Request   │
+                    └─────────┬───────┘
+                              │
+               ┌──────────────┼──────────────┐
+               │              │              │
+        ┌──────▼────┐  ┌─────▼─────┐  ┌─────▼─────┐
+        │  A2A/JSON │  │  Health   │  │  Default  │
+        │  RPC      │  │  Check    │  │  HTTP     │
+        └──────┬────┘  └─────┬─────┘  └─────┬─────┘
+               │              │              │
+         ┌─────▼─────┐        │              │
+         │Agent-to-   │        │              │
+         │Agent       │        │              │
+         └───────────┘        │              │
+                               │              │
+                        ┌──────▼─────┐        │
+                        │System Event│        │
+                        └────────────┘        │
+                                               │
+                                        ┌──────▼─────┐
+                                        │HTTP Request│
+                                        └────────────┘
 ```
 
-### 2. Request Processing
-```python
-    # 3. Pass request to agent handler
-    response = await call_next(request)
+### 3. Storage Architecture
+
+```
+MEMORY LAYOUT:
+
+┌─────────────────────────────────────────────────────────────┐
+│                    MessageCapture Instance                   │
+│                                                             │
+│  ┌─────────────────────────────────────────────────────┐  │
+│  │              messages: List[CapturedMessage]        │  │
+│  │                                                     │  │
+│  │  [msg_001] [msg_002] [msg_003] ... [msg_N]        │  │
+│  │   Tom        Jerry      Alice         ...           │  │
+│  │   incoming   outgoing    incoming      ...           │  │
+│  │   A2A        HTTP        System        ...           │  │
+│  └─────────────────────────────────────────────────────┘  │
+│                                                             │
+│  ┌─────────────────────────────────────────────────────┐  │
+│  │                  Thread Safety                       │  │
+│  │                                                     │  │
+│  │  asyncio.Lock()  ←───┐                               │  │
+│  │                     │                               │  │
+│  │  [Thread 1] ────────┼───▶ Capture Message           │  │
+│  │  [Thread 2] ────────┼───▶ Capture Message           │  │
+│  │  [Thread 3] ────────┘                               │  │
+│  └─────────────────────────────────────────────────────┘  │
+│                                                             │
+│  ┌─────────────────────────────────────────────────────┐  │
+│  │                 Memory Management                    │  │
+│  │                                                     │  │
+│  │  max_messages: 10,000                               │  │
+│  │  if len(messages) > 10,000:                        │  │
+│  │      messages.pop(0)  ←─ Remove oldest              │  │
+│  └─────────────────────────────────────────────────────┘  │
+└─────────────────────────────────────────────────────────────┘
 ```
 
-### 3. Response Capture
-```python
-    # 4. Capture outgoing response
-    await self.message_capture.capture(
-        agent_name=self.agent_name,
-        direction="outgoing",
-        message_type=MessageType.AGENT_RESPONSE,
-        content=f"[Response: {response.status_code}]",
-        metadata={"status_code": response.status_code, "processing_time": ...}
-    )
-    
-    return response
+### 4. Agent Identification System
+
+Each middleware instance knows its agent:
+
+```
+AGENT MIDDLEWARE MAPPING:
+
+┌─────────────────────────────────────────────────────────────┐
+│                    Agent Spawner                           │
+│                                                             │
+│  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐         │
+│  │   Tom       │  │   Jerry     │  │   Alice     │         │
+│  │   Config    │  │   Config    │  │   Config    │         │
+│  └──────┬──────┘  └──────┬──────┘  └──────┬──────┘         │
+         │                 │                 │                 │
+         ▼                 ▼                 ▼                 │
+┌────────┼────────┐ ┌─────┼────────┐ ┌─────┼────────┐         │
+│ Tom Middleware │ │Jerry Middleware│ │Alice Middleware│         │
+│ agent_name="tom"│ │agent_name="jerry"│ │agent_name="alice"│         │
+└────────┬────────┘ └─────┬────────┘ └─────┬────────┘         │
+         │                 │                 │                 │
+         └─────────────────┼─────────────────┘                 │
+                           │                                   │
+                ┌──────────▼──────────┐                       │
+                │  MessageCapture     │                       │
+                │  (Shared Instance)  │                       │
+                └─────────────────────┘                       │
+└─────────────────────────────────────────────────────────────┘
+
+MESSAGE TAGGING:
+
+┌─────────────────────────────────────────────────────────────┐
+│                CapturedMessage Structure                    │
+│                                                             │
+│  agent_name: "tom"          ←─ Which agent?               │
+│  direction: "incoming"       ←─ In or Out?                 │
+│  message_type: A2A           ←─ What kind?                 │
+│  content: "jsonrpc..."      ←─ What was said?             │
+│  timestamp: 1234567890      ←─ When?                      │
+│  metadata: {...}            ←─ Extra context              │
+│  message_id: "msg_123"       ←─ Unique ID                  │
+└─────────────────────────────────────────────────────────────┘
 ```
 
-## Message Classification
-
-The `_classify_message()` method categorizes incoming requests:
-
-```python
-def _classify_message(self, request: Request, body: str) -> MessageType:
-    url = str(request.url).lower()
-    body_lower = body.lower()
-    
-    # A2A protocol messages
-    if "/a2a" in url or "a2a" in body_lower or "jsonrpc" in body_lower:
-        return MessageType.AGENT_TO_AGENT
-    
-    # System/health endpoints
-    if "/health" in url or "/status" in url or "ping" in body_lower:
-        return MessageType.SYSTEM_EVENT
-    
-    # Default HTTP request
-    return MessageType.HTTP_REQUEST
-```
-
-## Global Instance Management
-
-### Singleton Pattern
-```python
-_global_message_capture: Optional[MessageCapture] = None
-
-def get_global_message_capture() -> MessageCapture:
-    global _global_message_capture
-    if _global_message_capture is None:
-        _global_message_capture = MessageCapture()  # Create once
-    return _global_message_capture  # Always return same instance
-```
-
-### Agent Integration
-```python
-# In agent_spawner.py - each agent gets middleware with shared capture
-message_capture = get_global_message_capture()  # Same instance for all agents
-
-app.add_middleware(MessageCaptureMiddleware, 
-                   agent_name=config.name,        # "tom", "jerry", "alice"
-                   message_capture=message_capture)  # Shared storage
-```
-
-## Usage Examples
-
-### Capturing Messages
-```python
-# Done automatically by middleware
-await message_capture.capture("tom", "incoming", MessageType.HTTP_REQUEST, "GET /health")
-```
-
-### Retrieving Messages
-```python
-# Get all messages
-all_messages = await message_capture.get_messages()
-
-# Filter by agent
-tom_messages = await message_capture.get_messages(agent_name="tom")
-
-# Filter by type
-a2a_messages = await message_capture.get_messages(message_type=MessageType.AGENT_TO_AGENT)
-
-# Filter by time range
-recent = await message_capture.get_messages(since=time.time() - 3600)
-
-# Limit results
-latest_10 = await message_capture.get_messages(limit=10)
-```
-
-### Getting Statistics
-```python
-stats = message_capture.get_stats()
-# Returns:
-# {
-#     "total_messages": 150,
-#     "message_count": 150,
-#     "agents": ["tom", "jerry", "alice"],
-#     "agent_counts": {"tom": 50, "jerry": 50, "alice": 50},
-#     "type_counts": {"http_request": 30, "agent_to_agent": 60, "agent_response": 60}
-# }
-```
-
-## Key Design Decisions
+## Design Rationale: Why This Architecture?
 
 ### 1. HTTP-Level Interception
-- **Pros**: Captures all communication, protocol-agnostic
-- **Cons**: Can't distinguish user vs AI messages (requires A2A-level parsing)
 
-### 2. Shared Storage
-- **Pros**: Centralized data, easy querying, memory efficient
-- **Cons**: Single point of failure (mitigated by thread safety)
+**Why not A2A-level parsing?**
+
+```
+PROS OF HTTP LEVEL:
+┌─────────────────────────────────────────┐
+│ ✓ Protocol Agnostic                    │
+│ ✓ Captures ALL communication           │
+│ ✓ No A2A SDK dependencies              │
+│ ✓ Works with any HTTP-based agent      │
+│ ✓ Simple deployment                    │
+└─────────────────────────────────────────┘
+
+CONS OF HTTP LEVEL:
+┌─────────────────────────────────────────┐
+│ ✗ Can't parse A2A message role field   │
+│ ✗ Limited message understanding         │
+│ ✗ More pattern matching needed          │
+└─────────────────────────────────────────┘
+```
+
+**Trade-off:** We sacrifice deep message understanding for universal compatibility.
+
+### 2. Shared Storage Pattern
+
+**Why not separate storage per agent?**
+
+```
+SHARED STORAGE (OUR CHOICE):
+┌─────────────────────────────────────────┐
+│ ✓ Single query point                    │
+│ ✓ Cross-agent analysis                  │
+│ ✓ Memory efficient                      │
+│ ✓ Global statistics                     │
+│ ✗ Single point of failure              │
+└─────────────────────────────────────────┘
+
+SEPARATE STORAGE (ALTERNATIVE):
+┌─────────────────────────────────────────┐
+│ ✓ Isolated failures                    │
+│ ✓ Per-agent memory limits               │
+│ ✗ Complex queries                      │
+│ ✗ Memory overhead                      │
+│ ✗ No cross-agent visibility             │
+└─────────────────────────────────────────┘
+```
+
+**Trade-off:** We accept a single point of failure for simplicity and cross-agent visibility.
 
 ### 3. Middleware Per Agent
-- **Pros**: Clear agent identification, independent lifecycle
-- **Cons**: Multiple middleware instances (minimal overhead)
 
-### 4. Message Classification
-- **Current**: URL and body pattern matching
-- **Limitation**: Can't parse A2A message `role` field at HTTP level
+**Why not one global middleware?**
 
-## Memory Management
+```
+PER-AGENT MIDDLEWARE (OUR CHOICE):
+┌─────────────────────────────────────────┐
+│ ✓ Clear agent identification             │
+│ ✓ Independent lifecycle                  │
+│ ✓ Easy to debug per-agent               │
+│ ✗ Multiple middleware instances         │
+└─────────────────────────────────────────┘
 
-```python
-# Automatic cleanup when limit reached
-if len(self.messages) > self.max_messages:
-    self.messages.pop(0)  # Remove oldest message
+GLOBAL MIDDLEWARE (ALTERNATIVE):
+┌─────────────────────────────────────────┐
+│ ✓ Single instance                       │
+│ ✗ Complex agent detection logic         │
+│ ✗ Harder to debug                       │
+└─────────────────────────────────────────┘
 ```
 
-## Thread Safety
+**Trade-off:** We accept multiple instances for clean agent identification.
 
-```python
-async def capture(self, ...):
-    message = CapturedMessage(...)
-    
-    async with self._lock:  # Prevent race conditions
-        self.messages.append(message)
-        self._message_count += 1
+## Real-World Usage Scenarios
+
+### Scenario 1: Debugging Communication Failures
+
+```
+PROBLEM: "Agents aren't talking to each other"
+
+BEFORE:
+┌─────────────┐    ┌─────────────┐
+│   Tom AI    │    │  Jerry AI   │
+│   "Hello?"  │───▶│   ???       │
+│   (no reply)│    │   (silence) │
+└─────────────┘    └─────────────┘
+❌ What happened? Did Tom send? Did Jerry receive?
+
+AFTER:
+┌─────────────┐    ┌─────────────┐
+│   Tom AI    │    │  Jerry AI   │
+│   "Hello?"  │───▶│   "Hi!"     │
+│   (sent)    │    │   (received)│
+└──────┬──────┘    └──────┬──────┘
+       │                  │
+       ▼                  ▼
+┌─────────────────────────────────┐
+│ Message Capture Log:           │
+│ 14:30:15 tom → "Hello?"        │
+│ 14:30:16 jerry ← "Hello?"      │
+│ 14:30:17 jerry → "Hi!"         │
+│ 14:30:18 tom ← "Hi!"           │
+└─────────────────────────────────┘
+✅ Full visibility into conversation
 ```
 
-## Limitations
+### Scenario 2: Performance Monitoring
 
-1. **HTTP-level only** - Can't parse A2A message content (role field)
-2. **Memory-based** - Messages lost on restart (no persistence)
-3. **No real-time notifications** - Subscribers removed (cleaned up)
-4. **Body truncation** - Response bodies not fully captured (content-length issues)
+```
+PROBLEM: "System is slow, which agent is the bottleneck?"
 
-## Future Enhancements
+MESSAGE CAPTURE ANALYSIS:
+┌─────────────────────────────────────────┐
+│ Agent Performance Stats:                │
+│                                         │
+│ Tom:     avg 200ms  (50 requests)      │
+│ Jerry:  avg 1.2s   (30 requests)      │  ← BOTTLENECK!
+│ Alice:   avg 150ms  (25 requests)      │
+│                                         │
+│ Jerry's A2A requests taking 6x longer! │
+└─────────────────────────────────────────┘
 
-1. **A2A-level parsing** - Parse message role field for better classification
-2. **Persistence** - Store messages to database/file
-3. **Real-time streaming** - WebSocket or SSE for live monitoring
-4. **Message filtering** - More sophisticated classification rules
-5. **Compression** - Compress large message bodies
+SOLUTION: Optimize Jerry's A2A handling
+```
+
+### Scenario 3: Conversation Analysis
+
+```
+PROBLEM: "What are my agents actually working on?"
+
+MESSAGE ANALYSIS:
+┌─────────────────────────────────────────┐
+│ Agent Collaboration Patterns:           │
+│                                         │
+│ Tom → Jerry: "Data analysis request"   │
+│ Jerry → Tom: "Here's the analysis"     │
+│ Tom → Alice: "Review these results"    │
+│ Alice → Tom: "Looks good, proceed"     │
+│                                         │
+│ INSIGHT: Tom is coordinating, Jerry is │
+│ analyzing, Alice is reviewing          │
+└─────────────────────────────────────────┘
+```
+
+## Current Limitations & Future Evolution
+
+### Current Constraints
+
+```
+┌─────────────────────────────────────────┐
+│ HTTP-LEVEL LIMITATIONS:                 │
+│                                         │
+│ ✗ Can't parse A2A message role field   │
+│ ✗ Don't know user vs AI input          │
+│ ✗ Limited to HTTP transport only       │
+│                                         │
+│ STORAGE LIMITATIONS:                    │
+│                                         │
+│ ✗ Memory-only (lost on restart)       │
+│ ✗ No persistence layer                 │
+│ ✗ Fixed 10,000 message limit           │
+│                                         │
+│ MONITORING LIMITATIONS:                 │
+│                                         │
+│ ✗ No real-time streaming               │
+│ ✗ No alerting system                   │
+│ ✗ No dashboard/UI                      │
+└─────────────────────────────────────────┘
+```
+
+### Evolution Path
+
+```
+PHASE 1: HTTP Capture (CURRENT)
+┌─────────────────────────────────────────┐
+│ ✓ Basic message interception            │
+│ ✓ Agent identification                 │
+│ ✓ Simple classification                 │
+│ ✓ Memory storage                       │
+└─────────────────────────────────────────┘
+        ↓
+PHASE 2: Enhanced Classification
+┌─────────────────────────────────────────┐
+│ ✓ A2A message parsing                   │
+│ ✓ User vs AI detection                  │
+│ ✓ Better pattern matching               │
+│ ✓ Content analysis                      │
+└─────────────────────────────────────────┘
+        ↓
+PHASE 3: Persistence & Streaming
+┌─────────────────────────────────────────┐
+│ ✓ Database storage                     │
+│ ✓ Real-time WebSocket streaming         │
+│ ✓ Message replay                       │
+│ ✓ Historical analysis                   │
+└─────────────────────────────────────────┘
+        ↓
+PHASE 4: Advanced Monitoring
+┌─────────────────────────────────────────┐
+│ ✓ Dashboard UI                         │
+│ ✓ Alert system                         │
+│ ✓ Performance metrics                  │
+│ ✓ Conversation analytics               │
+└─────────────────────────────────────────┘
+```
+
+## Implementation Summary
+
+This system solves the fundamental visibility problem in multi-agent systems by:
+
+1. **Intercepting** all HTTP communication at the middleware level
+2. **Classifying** messages based on patterns and protocols  
+3. **Storing** messages in a centralized, thread-safe location
+4. **Tagging** each message with agent identification
+5. **Providing** query and analysis capabilities
+
+The result is **complete visibility** into agent communication, enabling debugging, monitoring, and optimization of multi-agent systems that were previously opaque black boxes.
