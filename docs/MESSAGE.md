@@ -6,24 +6,26 @@
 When running multiple AI agents that communicate via the A2A protocol, we face a critical visibility gap:
 
 ```
-┌─────────────┐    ┌─────────────┐    ┌─────────────┐
-│   Tom AI    │    │  Jerry AI   │    │  Alice AI   │
-│   Agent     │    │   Agent     │    │   Agent     │
-└──────┬──────┘    └──────┬──────┘    └──────┬──────┘
-       │                  │                  │
-       └──────────────────┼──────────────────┘
-                          │
-                    ??? MYSTERIOUS BLACK BOX ???
-                          │
-       ┌──────────────────┼──────────────────┐
-       │                  │                  │
-┌──────▼──────┐    ┌──────▼──────┐    ┌──────▼──────┐
-│   User     │    │   Debug    │    │   Monitor   │
-│   "What    │    │   "Why     │    │   "How     │
-│   are they  │    │   failing?" │    │   busy?"   │
-│   talking   │    │            │    │            │
-│   about?"   │    │            │    │            │
-└─────────────┘    └─────────────┘    └─────────────┘
+          ┌──────────────┐      ┌──────────────┐      ┌──────────────┐
+          │   Tom AI     │      │   Jerry AI   │      │   Alice AI   │
+          │   Agent      │      │   Agent      │      │   Agent      │
+          └────────┬─────┘      └────────┬─────┘      └────────┬─────┘
+                   │                     │                     │
+                   └─────────────────────┼─────────────────────┘
+                                         │
+                    ┏━━━━━━━━━━━━━━━━━━━━╋━━━━━━━━━━━━━━━━━━━┓
+                    ┃   ??? MYSTERIOUS   │   BLACK BOX ???    ┃
+                    ┃    (No Visibility) │                   ┃
+                    ┗━━━━━━━━━━━━━━━━━━━━╋━━━━━━━━━━━━━━━━━━━┛
+                                         │
+          ┌──────────────────────────────┼──────────────────────────────┐
+          │                              │                              │
+    ┌─────▼──────┐              ┌────────▼─────┐              ┌────────▼─────┐
+    │   User     │              │   Debug      │              │   Monitor    │
+    │  "What are │              │  "Why are    │              │  "How busy   │
+    │   they     │              │   they       │              │   are they?  │
+    │  talking?" │              │  failing?"   │              │              │
+    └────────────┘              └──────────────┘              └──────────────┘
 ```
 
 **Without message capture, we're flying blind:**
@@ -36,35 +38,35 @@ When running multiple AI agents that communicate via the A2A protocol, we face a
 Intercept HTTP communication at the middleware level to capture, store, and analyze all agent interactions:
 
 ```
-┌─────────────┐    ┌─────────────┐    ┌─────────────┐
-│   Tom AI    │    │  Jerry AI   │    │  Alice AI   │
-│   Agent     │    │   Agent     │    │   Agent     │
-└──────┬──────┘    └──────┬──────┘    └──────┬──────┘
-       │                  │                  │
-       └────────┬─────────┼─────────┬────────┘
-                │         │         │
-        ┌───────▼─────┐   │   ┌────▼────┐
-        │   HTTP      │   │   │  HTTP   │
-        │ Middleware  │   │   │Middleware│
-        │   (Tom)     │   │   │ (Jerry) │
-        └───────┬─────┘   │   └────┬────┘
-                │         │         │
-                └─────────┼─────────┘
-                          │
-                ┌─────────▼─────────┐
-                │  MessageCapture   │  ← CENTRAL STORAGE
-                │   (All Messages)  │
-                └─────────┬─────────┘
-                          │
-        ┌─────────────────┼─────────────────┐
-        │                 │                 │
-┌───────▼──────┐   ┌───────▼──────┐   ┌───────▼──────┐
-│   Debug      │   │   Monitor    │   │   Analyze    │
-│   "See       │   │   "Real-time │   │   "Patterns  │
-│   exactly    │   │   activity"  │   │   and stats" │
-│   what       │   │             │   │             │
-│   happened"  │   │             │   │             │
-└──────────────┘   └──────────────┘   └──────────────┘
+          ┌──────────────┐      ┌──────────────┐      ┌──────────────┐
+          │   Tom AI     │      │   Jerry AI   │      │   Alice AI   │
+          │   Agent      │      │   Agent      │      │   Agent      │
+          └────────┬─────┘      └────────┬─────┘      └────────┬─────┘
+                   │                     │                     │
+                   └──────┬──────────────┼──────────────┬───────┘
+                          │              │              │
+                 ┌────────▼────┐  ┌──────▼──────┐  ┌───▼────────┐
+                 │   HTTP      │  │    HTTP     │  │   HTTP     │
+                 │ Middleware  │  │ Middleware  │  │Middleware  │
+                 │   (Tom)     │  │  (Jerry)    │  │  (Alice)   │
+                 └────────┬────┘  └──────┬──────┘  └───┬────────┘
+                          │              │              │
+                          └──────────────┼──────────────┘
+                                         │
+                     ┌────────────────────▼─────────────────────┐
+                     │      MessageCapture (CENTRAL HUB)        │
+                     │         Stores All Messages              │
+                     └────────────────────┬─────────────────────┘
+                                         │
+            ┌────────────────────────────┼────────────────────────┐
+            │                            │                        │
+      ┌─────▼──────┐            ┌────────▼────────┐        ┌──────▼─────┐
+      │   Debug    │            │    Monitor      │        │  Analyze   │
+      │            │            │                │        │            │
+      │ See exact  │            │ Real-time      │        │ Patterns & │
+      │ flow of    │            │ activity       │        │ statistics │
+      │ messages   │            │ dashboard      │        │            │
+      └────────────┘            └─────────────────┘        └────────────┘
 ```
 
 ## How It Works: The Mechanism
@@ -74,22 +76,28 @@ Intercept HTTP communication at the middleware level to capture, store, and anal
 We use Starlette middleware to intercept every HTTP request/response:
 
 ```
-HTTP REQUEST FLOW:
+    REQUEST PHASE                  RESPONSE PHASE
 
-┌─────────────┐    ┌──────────────────┐    ┌─────────────┐
-│   Client     │───▶│   Middleware     │───▶│   Agent     │
-│   Request    │    │   Intercept      │    │   Handler   │
-└─────────────┘    └──────────────────┘    └─────────────┘
-       │                      │                      │
-       │              1. Capture Request           │
-       │              2. Forward to Agent          │
-       │                      │                      │
-       │              3. Capture Response          │
-       │                      │                      │
-┌─────────────┐    ┌──────────────────┐    ┌─────────────┐
-│   Client     │◀───│   Middleware     │◀───│   Agent     │
-│   Response   │    │   Intercept      │    │   Handler   │
-└─────────────┘    └──────────────────┘    └─────────────┘
+┌──────────────┐               ┌──────────────────────┐
+│   Client     │               │   Agent Handler      │
+│   Request    │               │   (processes logic)  │
+└────────┬─────┘               └──────────┬───────────┘
+         │                                │
+         │  1. REQUEST CAPTURED           │
+         ├─────────────────────────────────▶
+         │                                │
+         │                  2. FORWARDED TO AGENT
+         │                                │
+         │◀─────────────────────────────────
+         │                  3. RESPONSE RECEIVED
+         │                                │
+         │  4. RESPONSE CAPTURED          │
+         │                                │
+         ▼                                ▼
+┌──────────────┐               ┌──────────────────────┐
+│   Client     │               │  MessageCapture      │
+│   Response   │               │  (All data stored)   │
+└──────────────┘               └──────────────────────┘
 ```
 
 ### 2. Message Classification Logic
@@ -97,68 +105,68 @@ HTTP REQUEST FLOW:
 The middleware categorizes traffic based on patterns:
 
 ```
-CLASSIFICATION DECISION TREE:
-
-                    ┌─────────────────┐
-                    │  HTTP Request   │
-                    └─────────┬───────┘
-                              │
-               ┌──────────────┼──────────────┐
-               │              │              │
-        ┌──────▼────┐  ┌─────▼─────┐  ┌─────▼─────┐
-        │  A2A/JSON │  │  Health   │  │  Default  │
-        │  RPC      │  │  Check    │  │  HTTP     │
-        └──────┬────┘  └─────┬─────┘  └─────┬─────┘
-               │              │              │
-         ┌─────▼─────┐        │              │
-         │Agent-to-   │        │              │
-         │Agent       │        │              │
-         └───────────┘        │              │
-                               │              │
-                        ┌──────▼─────┐        │
-                        │System Event│        │
-                        └────────────┘        │
-                                               │
-                                        ┌──────▼─────┐
-                                        │HTTP Request│
-                                        └────────────┘
+                        ┌──────────────────┐
+                        │   HTTP Request   │
+                        └────────┬─────────┘
+                                 │
+                 ┌───────────────┼───────────────┐
+                 │               │               │
+          ┌──────▼──────┐  ┌──────▼──────┐  ┌──▼────────┐
+          │   A2A/JSON  │  │  Health     │  │  Generic  │
+          │   RPC Call  │  │  Check      │  │   HTTP    │
+          └──────┬──────┘  └──────┬──────┘  └────┬──────┘
+                 │                │              │
+          ┌──────▼──────┐   ┌─────▼─────┐       │
+          │  Agent-to-  │   │   System  │       │
+          │   Agent     │   │   Event   │       │
+          │  (A2A Type) │   │           │       │
+          └─────────────┘   └───────────┘       │
+                                                 │
+                                          ┌──────▼─────┐
+                                          │ HTTP Req   │
+                                          │ (Default)  │
+                                          └────────────┘
 ```
 
 ### 3. Storage Architecture
 
 ```
-MEMORY LAYOUT:
-
-┌─────────────────────────────────────────────────────────────┐
-│                    MessageCapture Instance                   │
-│                                                             │
-│  ┌─────────────────────────────────────────────────────┐  │
-│  │              messages: List[CapturedMessage]        │  │
-│  │                                                     │  │
-│  │  [msg_001] [msg_002] [msg_003] ... [msg_N]        │  │
-│  │   Tom        Jerry      Alice         ...           │  │
-│  │   incoming   outgoing    incoming      ...           │  │
-│  │   A2A        HTTP        System        ...           │  │
-│  └─────────────────────────────────────────────────────┘  │
-│                                                             │
-│  ┌─────────────────────────────────────────────────────┐  │
-│  │                  Thread Safety                       │  │
-│  │                                                     │  │
-│  │  asyncio.Lock()  ←───┐                               │  │
-│  │                     │                               │  │
-│  │  [Thread 1] ────────┼───▶ Capture Message           │  │
-│  │  [Thread 2] ────────┼───▶ Capture Message           │  │
-│  │  [Thread 3] ────────┘                               │  │
-│  └─────────────────────────────────────────────────────┘  │
-│                                                             │
-│  ┌─────────────────────────────────────────────────────┐  │
-│  │                 Memory Management                    │  │
-│  │                                                     │  │
-│  │  max_messages: 10,000                               │  │
-│  │  if len(messages) > 10,000:                        │  │
-│  │      messages.pop(0)  ←─ Remove oldest              │  │
-│  └─────────────────────────────────────────────────────┘  │
-└─────────────────────────────────────────────────────────────┘
+┌───────────────────────────────────────────────────────────────────┐
+│                  MessageCapture Instance (Singleton)              │
+│                                                                   │
+│  ┌─────────────────────────────────────────────────────────────┐ │
+│  │  MESSAGE QUEUE: List[CapturedMessage]                       │ │
+│  │                                                             │ │
+│  │  [001: tom] [002: jerry] [003: alice] ... [N: tom]        │ │
+│  │   A2A msg    HTTP req    System evt      A2A resp        │ │
+│  │   incoming   outgoing    health check    outgoing        │ │
+│  └─────────────────────────────────────────────────────────────┘ │
+│                                                                   │
+│  ┌─────────────────────────────────────────────────────────────┐ │
+│  │  THREAD SAFETY: asyncio.Lock()                             │ │
+│  │                                                             │ │
+│  │  ┌─────────┐  ┌─────────┐  ┌─────────┐                  │ │
+│  │  │ Thread  │  │ Thread  │  │ Thread  │                  │ │
+│  │  │   #1    │  │   #2    │  │   #3    │                  │ │
+│  │  └────┬────┘  └────┬────┘  └────┬────┘                  │ │
+│  │       │            │            │                        │ │
+│  │       └────────────┼────────────┘                        │ │
+│  │                    │ (synchronized)                      │ │
+│  │            ┌───────▼───────┐                             │ │
+│  │            │  Lock Acquired│───▶ Append Message         │ │
+│  │            │  Lock Released│                             │ │
+│  │            └───────────────┘                             │ │
+│  └─────────────────────────────────────────────────────────────┘ │
+│                                                                   │
+│  ┌─────────────────────────────────────────────────────────────┐ │
+│  │  MEMORY MANAGEMENT                                          │ │
+│  │                                                             │ │
+│  │  MAX_MESSAGES = 10,000                                    │ │
+│  │  If length exceeds limit:                                │ │
+│  │    messages.pop(0)  ← Remove oldest message              │ │
+│  │    memory_freed += message_size                          │ │
+│  └─────────────────────────────────────────────────────────────┘ │
+└───────────────────────────────────────────────────────────────────┘
 ```
 
 ### 4. Agent Identification System
@@ -166,43 +174,44 @@ MEMORY LAYOUT:
 Each middleware instance knows its agent:
 
 ```
-AGENT MIDDLEWARE MAPPING:
+          AGENT SPAWNER
+    ┌─────────────────────────────┐
+    │                             │
+    │  ┌──────┐  ┌──────┐  ┌──────┐
+    │  │ Tom  │  │Jerry │  │Alice │
+    │  │Config│  │Config│  │Config│
+    │  └──┬───┘  └──┬───┘  └──┬───┘
+    │     │         │         │
+    └─────┼─────────┼─────────┼────────────────────────────┐
+          │         │         │
+      ┌───▼──┐  ┌───▼──┐  ┌───▼──┐
+      │Tom   │  │Jerry │  │Alice │
+      │Mware │  │Mware │  │Mware │
+      │agent │  │agent │  │agent │
+      │="tom"│  │="jerry"│  │="alice"│
+      └──┬───┘  └──┬───┘  └──┬───┘
+         │         │         │
+         └─────────┼─────────┘
+                   │
+          ┌────────▼──────────┐
+          │  MessageCapture   │
+          │  (Shared Instance)│
+          └───────────────────┘
 
-┌─────────────────────────────────────────────────────────────┐
-│                    Agent Spawner                           │
-│                                                             │
-│  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐         │
-│  │   Tom       │  │   Jerry     │  │   Alice     │         │
-│  │   Config    │  │   Config    │  │   Config    │         │
-│  └──────┬──────┘  └──────┬──────┘  └──────┬──────┘         │
-         │                 │                 │                 │
-         ▼                 ▼                 ▼                 │
-┌────────┼────────┐ ┌─────┼────────┐ ┌─────┼────────┐         │
-│ Tom Middleware │ │Jerry Middleware│ │Alice Middleware│         │
-│ agent_name="tom"│ │agent_name="jerry"│ │agent_name="alice"│         │
-└────────┬────────┘ └─────┬────────┘ └─────┬────────┘         │
-         │                 │                 │                 │
-         └─────────────────┼─────────────────┘                 │
-                           │                                   │
-                ┌──────────▼──────────┐                       │
-                │  MessageCapture     │                       │
-                │  (Shared Instance)  │                       │
-                └─────────────────────┘                       │
-└─────────────────────────────────────────────────────────────┘
+CAPTURED MESSAGE STRUCTURE:
 
-MESSAGE TAGGING:
-
-┌─────────────────────────────────────────────────────────────┐
-│                CapturedMessage Structure                    │
-│                                                             │
-│  agent_name: "tom"          ←─ Which agent?               │
-│  direction: "incoming"       ←─ In or Out?                 │
-│  message_type: A2A           ←─ What kind?                 │
-│  content: "jsonrpc..."      ←─ What was said?             │
-│  timestamp: 1234567890      ←─ When?                      │
-│  metadata: {...}            ←─ Extra context              │
-│  message_id: "msg_123"       ←─ Unique ID                  │
-└─────────────────────────────────────────────────────────────┘
+┌─────────────────────────────────────────────────┐
+│  CapturedMessage                                │
+│  ┌──────────────────────────────────────────┐  │
+│  │ agent_name: "tom"              ← Agent   │  │
+│  │ direction: "incoming"          ← Flow    │  │
+│  │ message_type: "A2A"            ← Type    │  │
+│  │ content: "{jsonrpc...}"        ← Data    │  │
+│  │ timestamp: 1709862615          ← When    │  │
+│  │ message_id: "msg_12345"        ← ID      │  │
+│  │ metadata: {source, size, ...}  ← Extra   │  │
+│  └──────────────────────────────────────────┘  │
+└─────────────────────────────────────────────────┘
 ```
 
 ## Design Rationale: Why This Architecture?
@@ -212,21 +221,19 @@ MESSAGE TAGGING:
 **Why not A2A-level parsing?**
 
 ```
-PROS OF HTTP LEVEL:
-┌─────────────────────────────────────────┐
-│ ✓ Protocol Agnostic                    │
-│ ✓ Captures ALL communication           │
-│ ✓ No A2A SDK dependencies              │
-│ ✓ Works with any HTTP-based agent      │
-│ ✓ Simple deployment                    │
-└─────────────────────────────────────────┘
+HTTP-LEVEL APPROACH (OUR CHOICE):
 
-CONS OF HTTP LEVEL:
-┌─────────────────────────────────────────┐
-│ ✗ Can't parse A2A message role field   │
-│ ✗ Limited message understanding         │
-│ ✗ More pattern matching needed          │
-└─────────────────────────────────────────┘
+  ADVANTAGES                    DISADVANTAGES
+  ┌──────────────────┐          ┌──────────────────┐
+  │ ✓ Protocol agnostic         │ ✗ Can't parse    │
+  │ ✓ Captures ALL comms        │   A2A role field │
+  │ ✓ No A2A SDK needed         │ ✗ Limited A2A    │
+  │ ✓ Works with any HTTP agent │   understanding  │
+  │ ✓ Simple deployment         │ ✗ More pattern   │
+  │ ✓ Universal compatibility   │   matching       │
+  └──────────────────┘          └──────────────────┘
+
+  Trade-off: Deep understanding for universal compatibility ✓
 ```
 
 **Trade-off:** We sacrifice deep message understanding for universal compatibility.
@@ -236,23 +243,17 @@ CONS OF HTTP LEVEL:
 **Why not separate storage per agent?**
 
 ```
-SHARED STORAGE (OUR CHOICE):
-┌─────────────────────────────────────────┐
-│ ✓ Single query point                    │
-│ ✓ Cross-agent analysis                  │
-│ ✓ Memory efficient                      │
-│ ✓ Global statistics                     │
-│ ✗ Single point of failure              │
-└─────────────────────────────────────────┘
+SHARED STORAGE (CHOSEN)          SEPARATE STORAGE (ALTERNATIVE)
 
-SEPARATE STORAGE (ALTERNATIVE):
-┌─────────────────────────────────────────┐
-│ ✓ Isolated failures                    │
-│ ✓ Per-agent memory limits               │
-│ ✗ Complex queries                      │
-│ ✗ Memory overhead                      │
-│ ✗ No cross-agent visibility             │
-└─────────────────────────────────────────┘
+┌──────────────────────┐         ┌──────────────────────┐
+│ ✓ Single query point │         │ ✓ Isolated failures  │
+│ ✓ Cross-agent view   │         │ ✓ Per-agent limits   │
+│ ✓ Memory efficient   │         │ ✗ Complex queries    │
+│ ✓ Global stats       │         │ ✗ Memory overhead    │
+│ ✗ Single failure     │         │ ✗ No cross-view      │
+└──────────────────────┘         └──────────────────────┘
+
+Trade-off: Single point of failure for simplicity & visibility ✓
 ```
 
 **Trade-off:** We accept a single point of failure for simplicity and cross-agent visibility.
@@ -262,20 +263,17 @@ SEPARATE STORAGE (ALTERNATIVE):
 **Why not one global middleware?**
 
 ```
-PER-AGENT MIDDLEWARE (OUR CHOICE):
-┌─────────────────────────────────────────┐
-│ ✓ Clear agent identification             │
-│ ✓ Independent lifecycle                  │
-│ ✓ Easy to debug per-agent               │
-│ ✗ Multiple middleware instances         │
-└─────────────────────────────────────────┘
+PER-AGENT MIDDLEWARE (CHOSEN)    GLOBAL MIDDLEWARE (ALTERNATIVE)
 
-GLOBAL MIDDLEWARE (ALTERNATIVE):
-┌─────────────────────────────────────────┐
-│ ✓ Single instance                       │
-│ ✗ Complex agent detection logic         │
-│ ✗ Harder to debug                       │
-└─────────────────────────────────────────┘
+┌──────────────────────┐         ┌──────────────────────┐
+│ ✓ Clear ID per agent │         │ ✓ Single instance    │
+│ ✓ Independent life   │         │ ✗ Complex detection  │
+│ ✓ Easy per-debugging │         │ ✗ Harder to debug    │
+│ ✓ Isolation          │         │ ✗ Tangled code       │
+│ ✗ Multiple instances │         │ ✗ Tight coupling     │
+└──────────────────────┘         └──────────────────────┘
+
+Trade-off: Multiple instances for clean identification ✓
 ```
 
 **Trade-off:** We accept multiple instances for clean agent identification.
@@ -287,49 +285,65 @@ GLOBAL MIDDLEWARE (ALTERNATIVE):
 ```
 PROBLEM: "Agents aren't talking to each other"
 
-BEFORE:
-┌─────────────┐    ┌─────────────┐
-│   Tom AI    │    │  Jerry AI   │
-│   "Hello?"  │───▶│   ???       │
-│   (no reply)│    │   (silence) │
-└─────────────┘    └─────────────┘
-❌ What happened? Did Tom send? Did Jerry receive?
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+BEFORE MESSAGE CAPTURE:
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-AFTER:
-┌─────────────┐    ┌─────────────┐
-│   Tom AI    │    │  Jerry AI   │
-│   "Hello?"  │───▶│   "Hi!"     │
-│   (sent)    │    │   (received)│
-└──────┬──────┘    └──────┬──────┘
-       │                  │
-       ▼                  ▼
-┌─────────────────────────────────┐
-│ Message Capture Log:           │
-│ 14:30:15 tom → "Hello?"        │
-│ 14:30:16 jerry ← "Hello?"      │
-│ 14:30:17 jerry → "Hi!"         │
-│ 14:30:18 tom ← "Hi!"           │
-└─────────────────────────────────┘
-✅ Full visibility into conversation
+  ┌──────────────────┐        ┌──────────────────┐
+  │    Tom AI Agent  │        │  Jerry AI Agent  │
+  │   "Hello?"       │───────▶│   (silence)      │
+  │   (sent or not?) │        │   (received or?) │
+  └──────────────────┘        └──────────────────┘
+
+  ❌ No visibility - Did Tom send? Did Jerry receive? Unknown.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+AFTER MESSAGE CAPTURE:
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  ┌──────────────────┐        ┌──────────────────┐
+  │    Tom AI Agent  │        │  Jerry AI Agent  │
+  │   "Hello?"       │───────▶│   "Hi!"          │
+  │   ✓ sent        │        │   ✓ received     │
+  └─────────┬────────┘        └────────┬─────────┘
+            │                          │
+            └──────────────┬───────────┘
+                           │
+            ┌──────────────▼──────────────┐
+            │   MESSAGE CAPTURE LOG       │
+            ├────────────────────────────┤
+            │ 14:30:15  tom → "Hello?"   │
+            │ 14:30:16  jerry ← "Hello?" │
+            │ 14:30:17  jerry → "Hi!"    │
+            │ 14:30:18  tom ← "Hi!"      │
+            └────────────────────────────┘
+
+  ✅ Full visibility - Complete conversation flow captured!
 ```
 
 ### Scenario 2: Performance Monitoring
 
 ```
-PROBLEM: "System is slow, which agent is the bottleneck?"
+PROBLEM: "System is slow - which agent is the bottleneck?"
 
-MESSAGE CAPTURE ANALYSIS:
-┌─────────────────────────────────────────┐
-│ Agent Performance Stats:                │
-│                                         │
-│ Tom:     avg 200ms  (50 requests)      │
-│ Jerry:  avg 1.2s   (30 requests)      │  ← BOTTLENECK!
-│ Alice:   avg 150ms  (25 requests)      │
-│                                         │
-│ Jerry's A2A requests taking 6x longer! │
-└─────────────────────────────────────────┘
+CAPTURED METRICS ANALYSIS:
+┌──────────────────────────────────────────────────────┐
+│            AGENT PERFORMANCE STATISTICS              │
+├──────────────────────────────────────────────────────┤
+│                                                      │
+│  Tom      ████░░░░░░░░░░░  ~200ms  (50 requests)   │
+│  Jerry    ████████████░░░░  ~1.2s   (30 requests)   │ ⚠️  BOTTLENECK
+│  Alice    ███░░░░░░░░░░░░░  ~150ms  (25 requests)   │
+│                                                      │
+│  Finding: Jerry's A2A latency is 6x higher!        │
+│  Root: Middleware processing delay identified      │
+│                                                      │
+└──────────────────────────────────────────────────────┘
 
-SOLUTION: Optimize Jerry's A2A handling
+ACTIONABLE INSIGHT:
+  → Optimize Jerry's request handler
+  → Add caching for repeated A2A calls
+  → Consider load balancing
 ```
 
 ### Scenario 3: Conversation Analysis
@@ -337,18 +351,27 @@ SOLUTION: Optimize Jerry's A2A handling
 ```
 PROBLEM: "What are my agents actually working on?"
 
-MESSAGE ANALYSIS:
-┌─────────────────────────────────────────┐
-│ Agent Collaboration Patterns:           │
-│                                         │
-│ Tom → Jerry: "Data analysis request"   │
-│ Jerry → Tom: "Here's the analysis"     │
-│ Tom → Alice: "Review these results"    │
-│ Alice → Tom: "Looks good, proceed"     │
-│                                         │
-│ INSIGHT: Tom is coordinating, Jerry is │
-│ analyzing, Alice is reviewing          │
-└─────────────────────────────────────────┘
+COLLABORATION PATTERN ANALYSIS:
+┌─────────────────────────────────────────────────┐
+│     MESSAGE FLOW & AGENT ROLES                  │
+├─────────────────────────────────────────────────┤
+│                                                 │
+│  Tom → Jerry    "Data analysis request"        │
+│       ▼                                         │
+│  Jerry → Tom    "Processed: [results]"         │
+│       ▼                                         │
+│  Tom → Alice    "Review these results"         │
+│       ▼                                         │
+│  Alice → Tom    "Validation: ✓ approved"       │
+│       ▼                                         │
+│  Tom → (User)   "Ready for deployment"         │
+│                                                 │
+│  ROLE ANALYSIS:                                │
+│  • Tom:   Orchestrator (coordinates workflow)  │
+│  • Jerry: Processor (analyzes data)            │
+│  • Alice: Validator (reviews & approves)       │
+│                                                 │
+└─────────────────────────────────────────────────┘
 ```
 
 ## Current Limitations & Future Evolution
@@ -356,61 +379,62 @@ MESSAGE ANALYSIS:
 ### Current Constraints
 
 ```
-┌─────────────────────────────────────────┐
-│ HTTP-LEVEL LIMITATIONS:                 │
-│                                         │
-│ ✗ Can't parse A2A message role field   │
-│ ✗ Don't know user vs AI input          │
-│ ✗ Limited to HTTP transport only       │
-│                                         │
-│ STORAGE LIMITATIONS:                    │
-│                                         │
-│ ✗ Memory-only (lost on restart)       │
-│ ✗ No persistence layer                 │
-│ ✗ Fixed 10,000 message limit           │
-│                                         │
-│ MONITORING LIMITATIONS:                 │
-│                                         │
-│ ✗ No real-time streaming               │
-│ ✗ No alerting system                   │
-│ ✗ No dashboard/UI                      │
-└─────────────────────────────────────────┘
+┌──────────────────────────────────────────────────────┐
+│         KNOWN LIMITATIONS (BY CATEGORY)              │
+├──────────────────────────────────────────────────────┤
+│                                                      │
+│  HTTP-LEVEL CONSTRAINTS:                            │
+│  ├─ ✗ Can't parse A2A role field                   │
+│  ├─ ✗ User vs AI input indistinguishable            │
+│  └─ ✗ HTTP transport only (no WebSocket)            │
+│                                                      │
+│  STORAGE CONSTRAINTS:                               │
+│  ├─ ✗ In-memory only (lost on restart)             │
+│  ├─ ✗ No persistent storage layer                   │
+│  └─ ✗ Fixed 10,000 message limit                    │
+│                                                      │
+│  MONITORING CONSTRAINTS:                             │
+│  ├─ ✗ No real-time streaming to clients             │
+│  ├─ ✗ No alerting/anomaly detection                 │
+│  └─ ✗ No dashboard or UI visualization             │
+│                                                      │
+└──────────────────────────────────────────────────────┘
 ```
 
-### Evolution Path
+### Evolution Roadmap
 
 ```
-PHASE 1: HTTP Capture (CURRENT)
-┌─────────────────────────────────────────┐
-│ ✓ Basic message interception            │
-│ ✓ Agent identification                 │
-│ ✓ Simple classification                 │
-│ ✓ Memory storage                       │
-└─────────────────────────────────────────┘
-        ↓
-PHASE 2: Enhanced Classification
-┌─────────────────────────────────────────┐
-│ ✓ A2A message parsing                   │
-│ ✓ User vs AI detection                  │
-│ ✓ Better pattern matching               │
-│ ✓ Content analysis                      │
-└─────────────────────────────────────────┘
-        ↓
+PHASE 1: HTTP Capture (CURRENT) ✓ SHIPPED
+┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓
+┃ ✓ Basic HTTP interception              ┃
+┃ ✓ Agent identification                 ┃
+┃ ✓ Message classification               ┃
+┃ ✓ In-memory storage                    ┃
+┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
+                    ▼
+PHASE 2: Deep Analysis (NEXT)
+┌────────────────────────────────────────┐
+│ ⟲ A2A message body parsing             │
+│ ⟲ User vs AI detection                 │
+│ ⟲ Intent extraction                    │
+│ ⟲ Content analysis & indexing          │
+└────────────────────────────────────────┘
+                    ▼
 PHASE 3: Persistence & Streaming
-┌─────────────────────────────────────────┐
-│ ✓ Database storage                     │
-│ ✓ Real-time WebSocket streaming         │
-│ ✓ Message replay                       │
-│ ✓ Historical analysis                   │
-└─────────────────────────────────────────┘
-        ↓
-PHASE 4: Advanced Monitoring
-┌─────────────────────────────────────────┐
-│ ✓ Dashboard UI                         │
-│ ✓ Alert system                         │
-│ ✓ Performance metrics                  │
-│ ✓ Conversation analytics               │
-└─────────────────────────────────────────┘
+┌────────────────────────────────────────┐
+│ ⟲ SQL/NoSQL database storage           │
+│ ⟲ Real-time WebSocket streaming        │
+│ ⟲ Message replay & audit trail         │
+│ ⟲ Historical trend analysis            │
+└────────────────────────────────────────┘
+                    ▼
+PHASE 4: Intelligence & Observability
+┌────────────────────────────────────────┐
+│ ⟲ Web dashboard & visualizations       │
+│ ⟲ Anomaly detection & alerts           │
+│ ⟲ Performance profiling                │
+│ ⟲ Agent behavior analytics             │
+└────────────────────────────────────────┘
 ```
 
 ## Implementation Summary

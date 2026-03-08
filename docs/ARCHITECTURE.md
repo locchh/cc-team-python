@@ -72,19 +72,28 @@ AgentProcess
 
 ## 🔗 **System Architecture**
 
-### 📊 **Mermaid Diagram**
-```mermaid
-graph TD
-    A[TeamManager] -->|creates| B[AgentConfig]
-    A -->|passes to| C[AgentSpawner]
-    C -->|creates| D[AgentProcess]
-    D -->|runs| E[Running A2A Agents]
-    
-    style A fill:#e3f2fd,stroke:#1976d2,color:#0d47a1
-    style B fill:#f3e5f5,stroke:#7b1fa2,color:#4a148c
-    style C fill:#e8f5e8,stroke:#388e3c,color:#1b5e20
-    style D fill:#fff8e1,stroke:#f57c00,color:#e65100
-    style E fill:#ffebee,stroke:#d32f2f,color:#b71c1c
+### 📊 **System Architecture**
+
+```
+┌─────────────┐         ┌─────────────┐
+│ TeamManager │────────▶│ AgentConfig │
+└──────┬──────┘ creates └─────────────┘
+       │
+       ▼ passes to
+┌─────────────┐
+│AgentSpawner │
+└──────┬──────┘ 
+       │ creates
+       ▼
+┌─────────────┐
+│AgentProcess │
+└──────┬──────┘ 
+       │ runs
+       ▼
+┌─────────────┐
+│Running A2A  │
+│   Agents    │
+└─────────────┘
 ```
 
 ### 🔄 **Data Flow**
