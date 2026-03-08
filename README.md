@@ -1,53 +1,58 @@
-# Claude Code + A2A
+# cc-team
 
-## Structure
+Spawn a team of Claude Code instances, each running as an A2A agent. They communicate with each other via the A2A protocol and can be monitored through a real-time TUI dashboard.
 
-Structure of repo:
+## Usage
 
-```
-snx/
-├── 📦 cc_team/              # Main package
-├── 📋 pyproject.toml        # Modern packaging
-├── 📚 USAGE.md              # Complete usage guide
-├── 🧪 test_*.py            # Test scripts
-├── 🤖 dynamic_agent.py     # Core agent system
-├── 📁 samples/              # Example teams!
-│   ├── team/                # Demo team (Tom, Jerry, Alice)
-│   └── my-new-team/         # Template team
-└── 📄 README.md             # Project overview
+```bash
+# Run directly from GitHub (no install needed)
+uvx --from git+https://github.com/locchh/snx cc-team run /path/to/your/team
+
+# Or install locally
+uv pip install -e .
+cc-team run samples/team
+cc-team validate samples/team
+cc-team help
 ```
 
-Structure of team:
+## Team structure
 
 ```
-team/
-├── tom
-│   ├── .claude/
-│   └── CLAUDE.md
-├── jerry
-│   ├── .claude/
-│   └── CLAUDE.md
-├── bob
-│   ├── .claude/
-│   └── CLAUDE.md
-├── alice
-│   ├── .claude/
-│   └── CLAUDE.md
-...
+my-team/
+├── config.yml
+├── tom/
+│   ├── CLAUDE.md       # Agent persona / system prompt
+│   └── .claude/
+├── jerry/
+│   ├── CLAUDE.md
+│   └── .claude/
+└── alice/
+    ├── CLAUDE.md
+    └── .claude/
 ```
 
-Usage: When running `cc-team <path/to/your/team>`, It will spawm a team of Claude Code instances, each instance is a member of the team. They can communicate with each other using A2A protocol. and you can interact with them through TUI (Textual)
+`config.yml`:
+```yaml
+team:
+  name: "My Team"
+agents:
+  tom:
+    host: localhost
+    port: 8001
+    model: claude-opus-4-6        # per-agent model override
+  jerry:
+    host: localhost
+    port: 8002
+settings:
+  model: claude-sonnet-4-6        # default model for all agents
+  auto_increment_ports: true
+```
 
-## Related to
+Available models: `claude-haiku-4-5-20251001` · `claude-sonnet-4-6` · `claude-opus-4-6`
 
-[A2A Documentation](https://a2a-protocol.org/latest/)
+## Related
 
-[A2A Repository](https://github.com/a2aproject/A2A)
-
-[Claude Agent SDK Python](https://github.com/anthropics/claude-agent-sdk-python)
-
-[A2A MCP Server - LocCH](https://github.com/locchh/A2A-MCP-Server)
-
-[A2A MCP Server - GongRzhe](https://github.com/GongRzhe/A2A-MCP-Server)
-
-[Textual](https://github.com/Textualize/textual)
+- [A2A Documentation](https://a2a-protocol.org/latest/)
+- [A2A Repository](https://github.com/a2aproject/A2A)
+- [Claude Agent SDK Python](https://github.com/anthropics/claude-agent-sdk-python)
+- [Textual](https://github.com/Textualize/textual)
