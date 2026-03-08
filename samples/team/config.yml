@@ -9,6 +9,7 @@ agents:
     host: localhost
     port: 8001
     description: "Tom - The technical specialist who handles coding and system architecture"
+    model: claude-opus-4-6  # override: use most capable model for this agent
   
   jerry:
     host: localhost
@@ -25,3 +26,9 @@ settings:
   default_host: localhost
   base_port: 8001
   auto_increment_ports: true
+  # Default model for all agents (per-agent model overrides this)
+  # Available models:
+  #   claude-haiku-4-5-20251001   (fastest, lowest cost)
+  #   claude-sonnet-4-6           (balanced)
+  #   claude-opus-4-6             (most capable)
+  model: claude-sonnet-4-6
