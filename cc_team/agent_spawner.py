@@ -17,6 +17,7 @@ from a2a.server.tasks import InMemoryTaskStore
 from a2a.types import AgentCapabilities, AgentCard, AgentSkill
 from a2a.utils import new_agent_text_message
 from dotenv import load_dotenv
+from .message_capture import get_global_message_capture, MessageCaptureMiddleware
 
 # Claude SDK imports
 from claude_agent_sdk import ClaudeAgentOptions, ClaudeSDKClient
@@ -88,15 +89,21 @@ class InlineAgentExecutor(AgentExecutor):
 
         prompt = context.get_user_input()
 
-        async with self.claude_client:
-            await self.claude_client.query(prompt)
+        try:
+            async with self.claude_client:
+                await self.claude_client.query(prompt)
 
-            response_text = ""
-            async for msg in self.claude_client.receive_response():
-                if hasattr(msg, "content"):
-                    for block in msg.content:
-                        if hasattr(block, "text"):
-                            response_text += block.text
+                response_text = ""
+                async for msg in self.claude_client.receive_response():
+                    if hasattr(msg, "content"):
+                        for block in msg.content:
+                            if hasattr(block, "text"):
+                                response_text += block.text
+        except asyncio.CancelledError:
+            raise
+        except Exception as e:
+            print(f"❌ Claude SDK error for agent {self.config.name}: {e}")
+            response_text = f"Error processing request: {e}"
 
         await event_queue.enqueue_event(new_agent_text_message(response_text))
 
@@ -106,7 +113,7 @@ class InlineAgentExecutor(AgentExecutor):
 
 
 def create_agent_server(config: AgentConfig):
-    """Create A2A server for a specific agent"""
+    """Create A2A server for a specific agent with message capture"""
     agent_executor = InlineAgentExecutor(config)
 
     skill = AgentSkill(
@@ -142,7 +149,20 @@ def create_agent_server(config: AgentConfig):
         http_handler=request_handler,
     )
 
-    return server
+    # Build the app with middleware
+    message_capture = get_global_message_capture()
+
+    # Get the original app from A2A server and add middleware
+    app = server.build()
+
+    # Add middleware to the existing app
+    app.add_middleware(
+        MessageCaptureMiddleware,
+        agent_name=config.name,
+        message_capture=message_capture,
+    )
+
+    return app
 
 
 class AgentProcess:
@@ -157,11 +177,11 @@ class AgentProcess:
     async def start(self) -> bool:
         """Start the agent process using inline logic"""
         try:
-            # Create agent server inline
-            server = create_agent_server(self.config)
+            # Create agent server with message capture
+            app = create_agent_server(self.config)
 
             # Start server in background task
-            self.task = asyncio.create_task(self._run_server(server))
+            self.task = asyncio.create_task(self._run_server(app))
 
             self.is_running = True
             print(
@@ -173,11 +193,11 @@ class AgentProcess:
             print(f"❌ Failed to start agent {self.config.name}: {e}")
             return False
 
-    async def _run_server(self, server):
+    async def _run_server(self, app):
         """Run the A2A server"""
         try:
             config = uvicorn.Config(
-                app=server.build(),
+                app=app,
                 host=self.config.host,
                 port=self.config.port,
                 log_level="error",  # Reduce log noise
@@ -194,10 +214,12 @@ class AgentProcess:
         if self.task and self.is_running:
             try:
                 self.task.cancel()
-                await asyncio.sleep(1)  # Give it time to shutdown
-
-                if not self.task.done():
-                    self.task.cancel()  # Force cancel if still running
+                try:
+                    await self.task
+                except (asyncio.CancelledError, Exception):
+                    pass
+                finally:
+                    self.task = None
 
                 self.is_running = False
                 print(f"🛑 Stopped agent {self.config.name}")
