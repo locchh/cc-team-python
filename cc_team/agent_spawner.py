@@ -3,9 +3,17 @@ Agent Spawner - Manages lifecycle of team agents
 """
 
 import asyncio
+import os
 import subprocess
 import uvicorn
 from typing import Dict, Optional
+
+_DEBUG = os.environ.get("TEAM_DEBUG") == "1"
+
+
+def _dbg(msg: str) -> None:
+    if _DEBUG:
+        print(msg)
 from .team_manager import AgentConfig, TeamManager
 
 # A2A imports for inline agent logic
@@ -88,7 +96,6 @@ class InlineAgentExecutor(AgentExecutor):
             await self.setup_claude()
 
         prompt = context.get_user_input()
-        print(f"[{self.config.name}] prompt={repr(prompt)}")
 
         try:
             async with self.claude_client:
@@ -96,7 +103,6 @@ class InlineAgentExecutor(AgentExecutor):
 
                 response_text = ""
                 async for msg in self.claude_client.receive_response():
-                    print(f"[{self.config.name}] msg type={type(msg).__name__} content={vars(msg) if hasattr(msg, '__dict__') else msg}")
                     if hasattr(msg, "content"):
                         for block in msg.content:
                             if hasattr(block, "text"):
@@ -104,10 +110,17 @@ class InlineAgentExecutor(AgentExecutor):
         except asyncio.CancelledError:
             raise
         except Exception as e:
-            print(f"❌ Claude SDK error for agent {self.config.name}: {type(e).__name__}: {e}")
+            _dbg(f"❌ Claude SDK error for agent {self.config.name}: {e}")
             response_text = f"Error processing request: {e}"
 
-        print(f"[{self.config.name}] final response_text={repr(response_text)}")
+        # Capture actual response text into MessageCapture
+        from .message_capture import get_global_message_capture, MessageType as MT
+        await get_global_message_capture().capture(
+            agent_name=self.config.name,
+            direction="outgoing",
+            message_type=MT.AGENT_RESPONSE,
+            content=response_text,
+        )
 
         await event_queue.enqueue_event(new_agent_text_message(response_text))
 
