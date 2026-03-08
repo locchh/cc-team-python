@@ -1,11 +1,11 @@
 # cc-team
 
 ```bash        
-                    █████████     █████████     █████████ 
-                    ██ ███ ██     ██ ███ ██     ██ ███ ██ 
-                ...███████████---███████████---███████████...
-                    █████████     █████████     █████████ 
-                      █   █         █   █         █   █   
+                              █████████     █████████     █████████ 
+                              ██ ███ ██     ██ ███ ██     ██ ███ ██ 
+                          ...███████████---███████████---███████████...
+                              █████████     █████████     █████████ 
+                                █   █         █   █         █   █   
 ```
 
 *Spawn a team of Claude Code instances, each running as an A2A agent. They communicate with each other via the A2A protocol and can be monitored through a real-time TUI dashboard.*
