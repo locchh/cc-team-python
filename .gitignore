@@ -3,6 +3,8 @@
 .mypy_cache/
 .pytest_cache/
 *.log
+registered_agents.json
+task_agent_mapping.json
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
