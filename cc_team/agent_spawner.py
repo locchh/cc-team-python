@@ -1,13 +1,143 @@
 """
 Agent Spawner - Manages lifecycle of team agents
 """
-import sys
 import asyncio
 import signal
 import subprocess
+import yaml
+import uvicorn
 from pathlib import Path
 from typing import Dict, List, Optional
 from .team_manager import AgentConfig, TeamManager
+
+# A2A imports for inline agent logic
+from a2a.server.agent_execution import AgentExecutor, RequestContext
+from a2a.server.apps import A2AStarletteApplication
+from a2a.server.events import EventQueue
+from a2a.server.request_handlers import DefaultRequestHandler
+from a2a.server.tasks import InMemoryTaskStore
+from a2a.types import AgentCapabilities, AgentCard, AgentSkill
+from a2a.utils import new_agent_text_message
+from dotenv import load_dotenv
+
+# Claude SDK imports
+from claude_agent_sdk import ClaudeAgentOptions, ClaudeSDKClient
+from claude_agent_sdk import tool, create_sdk_mcp_server
+
+
+class InlineAgentExecutor(AgentExecutor):
+    """Inline A2A agent using Claude SDK with configurable personality"""
+
+    _ = load_dotenv()
+
+    def __init__(self, config: AgentConfig) -> None:
+        self.config = config
+        self.personality = config.personality
+        self.claude_client = None
+        self.setup_complete = False
+
+    async def setup_claude(self):
+        """Setup Claude SDK with custom tools"""
+        if self.setup_complete:
+            return
+            
+        @tool("get_agent_info", "Get information about this agent", {})
+        async def get_agent_info(args):
+            return {
+                "content": [{
+                    "type": "text",
+                    "text": f"I am {self.config.name}, an AI agent. {self.config.config.get('description', '')}"
+                }]
+            }
+
+        @tool("get_team_members", "Get information about team members", {})
+        async def get_team_members(args):
+            return {
+                "content": [{
+                    "type": "text",
+                    "text": "I can communicate with other team members via A2A protocol. We work together to solve complex problems."
+                }]
+            }
+
+        server = create_sdk_mcp_server(
+            name=f"{self.config.name}-tools",
+            version="1.0.0",
+            tools=[get_agent_info, get_team_members]
+        )
+
+        system_prompt = f"{self.personality}\n\nYou are part of a team of AI agents. You can communicate with other team members using the A2A protocol. Be helpful, collaborative, and work together with your team."
+
+        options = ClaudeAgentOptions(
+            mcp_servers={"tools": server},
+            allowed_tools=["mcp__tools__get_agent_info", "mcp__tools__get_team_members"],
+            system_prompt=system_prompt
+        )
+
+        self.claude_client = ClaudeSDKClient(options=options)
+        self.setup_complete = True
+
+    async def execute(self, context: RequestContext, event_queue: EventQueue) -> None:
+        """Execute agent task using Claude SDK"""
+        if not self.setup_complete:
+            await self.setup_claude()
+
+        prompt = context.get_user_input()
+        
+        async with self.claude_client:
+            await self.claude_client.query(prompt)
+            
+            response_text = ""
+            async for msg in self.claude_client.receive_response():
+                if hasattr(msg, 'content'):
+                    for block in msg.content:
+                        if hasattr(block, 'text'):
+                            response_text += block.text
+
+        await event_queue.enqueue_event(new_agent_text_message(response_text))
+
+    async def cancel(self, context: RequestContext, event_queue: EventQueue) -> None:
+        """Handle task cancellation"""
+        pass
+
+
+def create_agent_server(config: AgentConfig):
+    """Create A2A server for a specific agent"""
+    agent_executor = InlineAgentExecutor(config)
+
+    skill = AgentSkill(
+        id="team_collaboration",
+        name="Team Collaboration",
+        description="AI agent that works with other team members",
+        tags=["team", "collaboration", "a2a"],
+        examples=[
+            "What can you help me with?",
+            "Can you work with your team on this?",
+            "Tell me about your capabilities"
+        ],
+    )
+
+    agent_card = AgentCard(
+        name=config.name,
+        description=config.config.get('description', f'A2A agent: {config.name}'),
+        url=f"http://{config.host}:{config.port}/",
+        version="1.0.0",
+        default_input_modes=["text"],
+        default_output_modes=["text"],
+        capabilities=AgentCapabilities(streaming=False),
+        skills=[skill],
+    )
+
+    request_handler = DefaultRequestHandler(
+        agent_executor=agent_executor,
+        task_store=InMemoryTaskStore(),
+    )
+
+    server = A2AStarletteApplication(
+        agent_card=agent_card,
+        http_handler=request_handler,
+    )
+
+    return server
 
 
 class AgentProcess:
@@ -20,20 +150,14 @@ class AgentProcess:
         self.is_running = False
         
     async def start(self) -> bool:
-        """Start the agent process"""
+        """Start the agent process using inline logic"""
         try:
-            # Use the dynamic_agent.py script
-            cmd = [
-                sys.executable, 
-                str(Path(__file__).parent.parent / "dynamic_agent.py"),
-                str(self.config.directory)
-            ]
+            # Create agent server inline
+            server = create_agent_server(self.config)
             
-            self.process = subprocess.Popen(
-                cmd,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
-                text=True
+            # Start server in background task
+            self.task = asyncio.create_task(
+                self._run_server(server)
             )
             
             self.is_running = True
@@ -44,15 +168,30 @@ class AgentProcess:
             print(f"❌ Failed to start agent {self.config.name}: {e}")
             return False
     
+    async def _run_server(self, server):
+        """Run the A2A server"""
+        try:
+            config = uvicorn.Config(
+                app=server.build(),
+                host=self.config.host,
+                port=self.config.port,
+                log_level="error"  # Reduce log noise
+            )
+            server_instance = uvicorn.Server(config)
+            await server_instance.serve()
+        except Exception as e:
+            print(f"❌ Agent {self.config.name} server error: {e}")
+            self.is_running = False
+    
     async def stop(self) -> bool:
         """Stop the agent process"""
-        if self.process and self.is_running:
+        if self.task and self.is_running:
             try:
-                self.process.terminate()
+                self.task.cancel()
                 await asyncio.sleep(1)  # Give it time to shutdown
                 
-                if self.process.poll() is None:
-                    self.process.kill()  # Force kill if still running
+                if not self.task.done():
+                    self.task.cancel()  # Force cancel if still running
                 
                 self.is_running = False
                 print(f"🛑 Stopped agent {self.config.name}")
@@ -66,7 +205,7 @@ class AgentProcess:
     
     def is_alive(self) -> bool:
         """Check if agent process is still running"""
-        return self.process and self.process.poll() is None and self.is_running
+        return self.task and not self.task.done() and self.is_running
 
 
 class AgentSpawner:
@@ -113,21 +252,24 @@ class AgentSpawner:
         
         print(f"🛑 Stopping {len(self.agent_processes)} agents...")
         
+        # Copy items to avoid dictionary changed size during iteration
+        agent_items = list(self.agent_processes.items())
         success_count = 0
-        for agent_name, agent_process in self.agent_processes.items():
+        
+        for agent_name, agent_process in agent_items:
             if await agent_process.stop():
                 success_count += 1
         
         self.agent_processes.clear()
         self.is_running = False
         
-        if success_count == len(self.agent_processes):
+        total_agents = len(agent_items)
+        if success_count == total_agents:
             print(f"✅ All {success_count} agents stopped successfully")
             return True
         else:
-            print(f"⚠️  Stopped {success_count}/{len(self.agent_processes)} agents")
-            return False
-    
+            print(f"⚠️  Stopped {success_count}/{total_agents} agents")
+            return success_count > 0  
     async def start_agent(self, agent_name: str) -> bool:
         """Start a specific agent"""
         if agent_name in self.agent_processes and self.agent_processes[agent_name].is_running:
@@ -169,7 +311,7 @@ class AgentSpawner:
                 "host": agent_process.config.host,
                 "port": agent_process.config.port,
                 "running": agent_process.is_alive(),
-                "pid": agent_process.process.pid if agent_process.process else None
+                "task_id": id(agent_process.task) if agent_process.task else None
             }
         
         return status
@@ -183,9 +325,5 @@ class AgentSpawner:
     
     def setup_signal_handlers(self):
         """Setup signal handlers for graceful shutdown"""
-        def signal_handler(signum, frame):
-            print(f"\n🛑 Received signal {signum}, shutting down agents...")
-            asyncio.create_task(self.stop_all_agents())
-        
-        signal.signal(signal.SIGINT, signal_handler)
-        signal.signal(signal.SIGTERM, signal_handler)
+        # Disabled signal handlers to prevent hanging
+        pass
