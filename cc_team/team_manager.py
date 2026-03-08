@@ -163,6 +163,7 @@ class TeamManager:
                     "name": agent_name,
                     "host": agent_config.host,
                     "port": agent_config.port,
+                    "model": agent_config.model,
                     "has_agent_definition": bool(agent_config.agent_definition),
                     "has_claude_dir": (agent_config.directory / ".claude").exists(),
                 }

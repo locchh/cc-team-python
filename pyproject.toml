@@ -1,0 +1,24 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "cc-team"
+version = "1.0.0"
+requires-python = ">=3.12"
+dependencies = [
+    "claude-agent-sdk",
+    "a2a-sdk[http-server]",
+    "fastapi",
+    "uvicorn[standard]",
+    "textual",
+    "pyyaml",
+    "python-dotenv",
+    "httpx",
+]
+
+[tool.setuptools.packages.find]
+include = ["cc_team*"]
+
+[project.scripts]
+cc-team = "cc_team.cli:main"
