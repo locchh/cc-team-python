@@ -1,0 +1,27 @@
+# Team Configuration
+team:
+  name: "Demo Team"
+  description: "A demonstration team of AI agents"
+
+# Agent configurations
+agents:
+  tom:
+    host: localhost
+    port: 8001
+    description: "Tom - The technical specialist who handles coding and system architecture"
+  
+  jerry:
+    host: localhost
+    port: 8002
+    description: "Jerry - The research analyst who gathers information and provides insights"
+  
+  alice:
+    host: localhost
+    port: 8003
+    description: "Alice - The project manager who coordinates team efforts and ensures smooth workflow"
+
+# Global settings
+settings:
+  default_host: localhost
+  base_port: 8001
+  auto_increment_ports: true
