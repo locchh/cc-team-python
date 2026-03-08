@@ -97,11 +97,11 @@ class TeamDashboard(App):
     }
     
     .status-running {
-        border-color: $success;
+        border: solid $success;
     }
     
     .status-stopped {
-        border-color: $error;
+        border: solid $error;
     }
     """
     
