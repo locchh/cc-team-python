@@ -3,14 +3,9 @@ Agent Spawner - Manages lifecycle of team agents
 """
 
 import asyncio
-import os
 import subprocess
 import uvicorn
 from typing import Dict, Optional
-
-def _dbg(msg: str) -> None:
-    if os.environ.get("TEAM_DEBUG") == "1":
-        print(msg)
 from .team_manager import AgentConfig, TeamManager
 
 # A2A imports for inline agent logic
@@ -107,7 +102,7 @@ class InlineAgentExecutor(AgentExecutor):
         except asyncio.CancelledError:
             raise
         except Exception as e:
-            _dbg(f"❌ Claude SDK error for agent {self.config.name}: {e}")
+            print(f"❌ Claude SDK error for agent {self.config.name}: {e}")
             response_text = f"Error processing request: {e}"
 
         # Capture actual response text into MessageCapture
