@@ -3,12 +3,9 @@ Agent Spawner - Manages lifecycle of team agents
 """
 
 import asyncio
-import signal
 import subprocess
-import yaml
 import uvicorn
-from pathlib import Path
-from typing import Dict, List, Optional
+from typing import Dict, Optional
 from .team_manager import AgentConfig, TeamManager
 
 # A2A imports for inline agent logic
