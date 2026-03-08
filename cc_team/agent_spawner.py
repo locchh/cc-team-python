@@ -176,13 +176,10 @@ class AgentSpawner:
     
     async def monitor_agents(self):
         """Monitor agent processes and restart if needed"""
+        # Disabled monitoring to prevent crash loops
+        # Agents will be restarted manually if needed
         while self.is_running:
-            for agent_name, agent_process in list(self.agent_processes.items()):
-                if not agent_process.is_alive():
-                    print(f"⚠️  Agent {agent_name} died, attempting restart...")
-                    await agent_process.start()
-            
-            await asyncio.sleep(5)  # Check every 5 seconds
+            await asyncio.sleep(30)  # Just sleep to keep the task alive
     
     def setup_signal_handlers(self):
         """Setup signal handlers for graceful shutdown"""
