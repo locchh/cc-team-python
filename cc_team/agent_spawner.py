@@ -27,7 +27,7 @@ from claude_agent_sdk import tool, create_sdk_mcp_server
 class InlineAgentExecutor(AgentExecutor):
     """Inline A2A agent using Claude SDK with configurable agent definition"""
 
-    _ = load_dotenv()
+    _ = load_dotenv(override=True)
 
     def __init__(self, config: AgentConfig) -> None:
         self.config = config
@@ -88,6 +88,7 @@ class InlineAgentExecutor(AgentExecutor):
             await self.setup_claude()
 
         prompt = context.get_user_input()
+        print(f"[{self.config.name}] prompt={repr(prompt)}")
 
         try:
             async with self.claude_client:
@@ -95,6 +96,7 @@ class InlineAgentExecutor(AgentExecutor):
 
                 response_text = ""
                 async for msg in self.claude_client.receive_response():
+                    print(f"[{self.config.name}] msg type={type(msg).__name__} content={vars(msg) if hasattr(msg, '__dict__') else msg}")
                     if hasattr(msg, "content"):
                         for block in msg.content:
                             if hasattr(block, "text"):
@@ -102,8 +104,10 @@ class InlineAgentExecutor(AgentExecutor):
         except asyncio.CancelledError:
             raise
         except Exception as e:
-            print(f"❌ Claude SDK error for agent {self.config.name}: {e}")
+            print(f"❌ Claude SDK error for agent {self.config.name}: {type(e).__name__}: {e}")
             response_text = f"Error processing request: {e}"
+
+        print(f"[{self.config.name}] final response_text={repr(response_text)}")
 
         await event_queue.enqueue_event(new_agent_text_message(response_text))
 
