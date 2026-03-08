@@ -182,6 +182,7 @@ class AgentProcess:
                 port=self.config.port,
                 log_level="error",  # Reduce log noise
             )
+            # Create and run HTTP server
             server_instance = uvicorn.Server(config)
             await server_instance.serve()
         except Exception as e:
