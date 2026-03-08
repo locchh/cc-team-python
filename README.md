@@ -63,4 +63,5 @@ Available models: `claude-haiku-4-5-20251001` · `claude-sonnet-4-6` · `claude-
 - [A2A Documentation](https://a2a-protocol.org/latest/)
 - [A2A Repository](https://github.com/a2aproject/A2A)
 - [Claude Agent SDK Python](https://github.com/anthropics/claude-agent-sdk-python)
+- [A2A MCP Server - Locch](https://github.com/locchh/A2A-MCP-Server)
 - [Textual](https://github.com/Textualize/textual)
