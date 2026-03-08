@@ -50,9 +50,10 @@ class AgentPanel(Vertical):
     }
 
     AgentPanel > #panel-header {
-        height: 1;
+        height: 7;
         background: $boost;
         padding: 0 1;
+        content-align: center middle;
     }
 
     AgentPanel > RichLog {
@@ -78,10 +79,21 @@ class AgentPanel(Vertical):
         self._log_widget = log
         yield log
 
+    # Pixel-art Claude face (orange, ~5 lines)
+    _CLAUDE_ART = (
+        "[#d4682a]           [/]",
+        "[#d4682a] █████████ [/]",
+        "[#d4682a] ██ ███ ██ [/]",
+        "[#d4682a]███████████[/]",
+        "[#d4682a] █████████ [/]",
+        "[#d4682a]   █   █   [/]",
+    )
+
     def _make_header(self) -> str:
         dot = "[bold green]●[/bold green]" if self._agent_running else "[dim]○[/dim]"
         port_info = f"[dim]:{self.port}[/dim]"
-        return f" {dot} [bold]{self.agent_name}[/bold]{port_info}"
+        art = "\n".join(self._CLAUDE_ART)
+        return f"{art}\n {dot} [bold]{self.agent_name}[/bold]{port_info}"
 
     def update_header(self) -> None:
         self.query_one("#panel-header", Static).update(self._make_header())
