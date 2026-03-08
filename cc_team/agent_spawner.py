@@ -24,13 +24,13 @@ from claude_agent_sdk import tool, create_sdk_mcp_server
 
 
 class InlineAgentExecutor(AgentExecutor):
-    """Inline A2A agent using Claude SDK with configurable personality"""
+    """Inline A2A agent using Claude SDK with configurable agent definition"""
 
     _ = load_dotenv()
 
     def __init__(self, config: AgentConfig) -> None:
         self.config = config
-        self.personality = config.personality
+        self.agent_definition = config.agent_definition
         self.claude_client = None
         self.setup_complete = False
 
@@ -67,7 +67,7 @@ class InlineAgentExecutor(AgentExecutor):
             tools=[get_agent_info, get_team_members],
         )
 
-        system_prompt = f"{self.personality}\n\nYou are part of a team of AI agents. You can communicate with other team members using the A2A protocol. Be helpful, collaborative, and work together with your team."
+        system_prompt = f"{self.agent_definition}\n\nYou are part of a team of AI agents. You can communicate with other team members using the A2A protocol. Be helpful, collaborative, and work together with your team."
 
         options = ClaudeAgentOptions(
             mcp_servers={"tools": server},

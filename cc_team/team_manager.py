@@ -15,7 +15,7 @@ class AgentConfig:
     name: str
     directory: Path
     config: Dict
-    personality: str
+    agent_definition: str
     host: str
     port: int
 
@@ -64,12 +64,12 @@ class TeamManager:
             # Get agent config from central config.yml
             agent_config_data = self.team_config.get("agents", {}).get(agent_name, {})
 
-            # Load personality from CLAUDE.md
-            personality_file = agent_dir / "CLAUDE.md"
-            personality = ""
-            if personality_file.exists():
-                with open(personality_file, "r") as f:
-                    personality = f.read().strip()
+            # Load agent definition from CLAUDE.md
+            agent_definition_file = agent_dir / "CLAUDE.md"
+            agent_definition = ""
+            if agent_definition_file.exists():
+                with open(agent_definition_file, "r") as f:
+                    agent_definition = f.read().strip()
 
             # Use central config or defaults
             settings = self.team_config.get("settings", {})
@@ -99,7 +99,7 @@ class TeamManager:
                     "description": description,
                     **agent_config_data,
                 },
-                personality=personality,
+                agent_definition=agent_definition,
                 host=host,
                 port=port,
             )
@@ -133,9 +133,9 @@ class TeamManager:
                 )
             used_ports.add(agent_config.port)
 
-        # Check for missing personality files
+        # Check for missing agent definition files
         for agent_name, agent_config in self.agents.items():
-            if not agent_config.personality:
+            if not agent_config.agent_definition:
                 issues.append(f"Missing CLAUDE.md for agent: {agent_name}")
 
         # Check for missing .claude directories
@@ -158,7 +158,7 @@ class TeamManager:
                     "name": agent_name,
                     "host": agent_config.host,
                     "port": agent_config.port,
-                    "has_personality": bool(agent_config.personality),
+                    "has_agent_definition": bool(agent_config.agent_definition),
                     "has_claude_dir": (agent_config.directory / ".claude").exists(),
                 }
             )
