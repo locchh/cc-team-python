@@ -8,11 +8,8 @@ import subprocess
 import uvicorn
 from typing import Dict, Optional
 
-_DEBUG = os.environ.get("TEAM_DEBUG") == "1"
-
-
 def _dbg(msg: str) -> None:
-    if _DEBUG:
+    if os.environ.get("TEAM_DEBUG") == "1":
         print(msg)
 from .team_manager import AgentConfig, TeamManager
 
