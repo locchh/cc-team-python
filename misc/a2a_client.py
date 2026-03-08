@@ -87,8 +87,9 @@ class A2AClient:
         print("🤖 A2A Team Chat Client")
         print("=" * 60)
         print(f"\n✅ Available agents: {', '.join(sorted(self.agents.keys()))}")
-        print("\n📝 Format: agent_name: message")
-        print("   Example: tom: What can you help with?")
+        print("\n📝 Format:")
+        print("   agent_name: message   → send to one agent")
+        print("   message               → broadcast to all agents")
         print("   Type 'quit' or 'exit' to quit\n")
 
         while True:
@@ -102,21 +103,23 @@ class A2AClient:
                     print("👋 Goodbye!")
                     break
 
-                if ":" not in user_input:
-                    print("❌ Invalid format. Use: agent_name: message")
-                    continue
-
-                agent_name, message = user_input.split(":", 1)
-                agent_name = agent_name.strip()
-                message = message.strip()
+                # Broadcast if no agent name prefix, otherwise direct
+                if ":" in user_input and user_input.split(":")[0].strip() in self.agents:
+                    agent_name, message = user_input.split(":", 1)
+                    targets = [agent_name.strip()]
+                    message = message.strip()
+                else:
+                    targets = sorted(self.agents.keys())
+                    message = user_input
 
                 if not message:
                     print("❌ Message cannot be empty")
                     continue
 
-                print(f"\n📤 Sending to {agent_name}...")
-                response = await self.send_message(agent_name, message)
-                print(f"📥 Response from {agent_name}:\n{response}\n")
+                for target in targets:
+                    print(f"\n📤 Sending to {target}...")
+                    response = await self.send_message(target, message)
+                    print(f"📥 {target}:\n{response}")
 
             except KeyboardInterrupt:
                 print("\n👋 Goodbye!")
