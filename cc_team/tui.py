@@ -11,6 +11,7 @@ from typing import Optional, Dict
 
 from textual.app import ComposeResult, App
 from textual.containers import Horizontal, Vertical
+from textual.message import Message
 from textual.widgets import RichLog, Header, Footer, Static
 from textual.binding import Binding
 from rich.text import Text
@@ -26,6 +27,13 @@ from .message_capture import (
 
 class AgentPanel(Vertical):
     """Full-height vertical pane for a single agent."""
+
+    can_focus = True
+
+    class Activated(Message):
+        def __init__(self, agent_name: str) -> None:
+            self.agent_name = agent_name
+            super().__init__()
 
     DEFAULT_CSS = """
     AgentPanel {
@@ -177,6 +185,9 @@ class AgentPanel(Vertical):
         self.remove_class("running", "stopped")
         self.add_class("running" if is_running else "stopped")
 
+    def on_focus(self) -> None:
+        self.post_message(self.Activated(self.agent_name))
+
 
 class TeamTUI(App):
     """Team monitoring dashboard — agents as vertical panes."""
@@ -188,8 +199,7 @@ class TeamTUI(App):
         Binding("ctrl+x", "stop_all", "Stop All"),
         Binding("s", "start_focused", "Start"),
         Binding("x", "stop_focused", "Stop"),
-        Binding("c", "clear_focused", "Clear"),
-        Binding("tab", "focus_next", "Next Panel"),
+        Binding("tab", "next_panel", "Next Panel"),
     ]
 
     CSS = """
@@ -236,6 +246,7 @@ class TeamTUI(App):
         if agent_names:
             self.focused_agent = agent_names[0]
             self.agent_panels[agent_names[0]].add_class("focused")
+            self.agent_panels[agent_names[0]].focus()
 
         self.set_interval(2.0, self._poll_messages)
         self.set_interval(5.0, self._poll_agent_status)
@@ -270,23 +281,19 @@ class TeamTUI(App):
         if self.spawner and self.focused_agent:
             await self.spawner.stop_agent(self.focused_agent)
 
-    def action_clear_focused(self) -> None:
+    def on_agent_panel_activated(self, event: AgentPanel.Activated) -> None:
         if self.focused_agent and self.focused_agent in self.agent_panels:
-            panel = self.agent_panels[self.focused_agent]
-            if panel._log_widget:
-                panel._log_widget.clear()
-                panel.last_message_count = 0
+            self.agent_panels[self.focused_agent].remove_class("focused")
+        self.focused_agent = event.agent_name
+        self.agent_panels[self.focused_agent].add_class("focused")
 
-    def action_focus_next(self) -> None:
+    def action_next_panel(self) -> None:
         names = sorted(self.agent_panels.keys())
         if not names:
             return
-        # Remove focused style from current (bug 3: guard against None / stale key)
-        if self.focused_agent and self.focused_agent in self.agent_panels:
-            self.agent_panels[self.focused_agent].remove_class("focused")
         idx = names.index(self.focused_agent) if self.focused_agent in names else 0
-        self.focused_agent = names[(idx + 1) % len(names)]
-        self.agent_panels[self.focused_agent].add_class("focused")
+        next_name = names[(idx + 1) % len(names)]
+        self.agent_panels[next_name].focus()  # triggers on_focus → Activated message
 
     async def action_quit(self) -> None:
         if self.spawner:
