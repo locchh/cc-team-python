@@ -4,7 +4,9 @@ Agent Spawner - Manages lifecycle of team agents
 
 import asyncio
 import subprocess
+import uuid
 import uvicorn
+import httpx
 from typing import Dict, Optional
 from .team_manager import AgentConfig, TeamManager
 
@@ -29,8 +31,9 @@ class InlineAgentExecutor(AgentExecutor):
 
     _ = load_dotenv(override=True)
 
-    def __init__(self, config: AgentConfig) -> None:
+    def __init__(self, config: AgentConfig, team_configs: Dict[str, "AgentConfig"]) -> None:
         self.config = config
+        self.team_configs = team_configs
         self.agent_definition = config.agent_definition
         self.claude_client = None
         self.setup_complete = False
