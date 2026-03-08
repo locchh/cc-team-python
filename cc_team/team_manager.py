@@ -18,6 +18,7 @@ class AgentConfig:
     agent_definition: str
     host: str
     port: int
+    model: Optional[str] = None
 
 
 class TeamManager:
@@ -89,6 +90,9 @@ class TeamManager:
                 "description", f"A2A agent: {agent_name}"
             )
 
+            # Model: per-agent override, then global default, then None (SDK default)
+            model = agent_config_data.get("model") or settings.get("model") or None
+
             return AgentConfig(
                 name=agent_name,
                 directory=agent_dir,
@@ -102,6 +106,7 @@ class TeamManager:
                 agent_definition=agent_definition,
                 host=host,
                 port=port,
+                model=model,
             )
 
         except Exception as e:
