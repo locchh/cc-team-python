@@ -49,35 +49,84 @@ class InlineAgentExecutor(AgentExecutor):
                 "content": [
                     {
                         "type": "text",
-                        "text": f"I am {self.config.name}, an AI agent. {self.config.config.get('description', '')}",
+                        "text": f"I am {self.config.name}. {self.config.config.get('description', '')}",
                     }
                 ]
             }
 
-        @tool("get_team_members", "Get information about team members", {})
+        @tool("get_team_members", "List all team members and their addresses", {})
         async def get_team_members(args):
-            return {
-                "content": [
-                    {
-                        "type": "text",
-                        "text": "I can communicate with other team members via A2A protocol. We work together to solve complex problems.",
+            members = []
+            for name, cfg in self.team_configs.items():
+                if name != self.config.name:
+                    members.append(f"- {name}: http://{cfg.host}:{cfg.port}/  ({cfg.config.get('description', '')})")
+            text = "Team members:\n" + "\n".join(members) if members else "No other team members."
+            return {"content": [{"type": "text", "text": text}]}
+
+        @tool(
+            "send_message_to_agent",
+            "Send a message to another agent and get their response",
+            {"agent_name": str, "message": str},
+        )
+        async def send_message_to_agent(args):
+            target = args.get("agent_name", "")
+            message = args.get("message", "")
+
+            if target not in self.team_configs:
+                available = ", ".join(n for n in self.team_configs if n != self.config.name)
+                return {"content": [{"type": "text", "text": f"Agent '{target}' not found. Available: {available}"}]}
+
+            cfg = self.team_configs[target]
+            url = f"http://{cfg.host}:{cfg.port}/"
+            request_data = {
+                "jsonrpc": "2.0",
+                "id": str(uuid.uuid4()),
+                "method": "message/send",
+                "params": {
+                    "message": {
+                        "messageId": str(uuid.uuid4()),
+                        "role": "user",
+                        "parts": [{"text": message}],
                     }
-                ]
+                },
             }
+            try:
+                async with httpx.AsyncClient(timeout=60) as client:
+                    resp = await client.post(url, json=request_data, headers={"Content-Type": "application/json"})
+                if resp.status_code == 200:
+                    result = resp.json()
+                    result_data = result.get("result", {})
+                    if result_data.get("kind") == "message":
+                        texts = [p["text"] for p in result_data.get("parts", []) if "text" in p]
+                        reply = "\n".join(texts) or "[empty response]"
+                    else:
+                        reply = str(result_data)
+                else:
+                    reply = f"HTTP {resp.status_code}: {resp.text[:200]}"
+            except Exception as e:
+                reply = f"Error contacting {target}: {e}"
+
+            return {"content": [{"type": "text", "text": f"{target}: {reply}"}]}
 
         server = create_sdk_mcp_server(
             name=f"{self.config.name}-tools",
             version="1.0.0",
-            tools=[get_agent_info, get_team_members],
+            tools=[get_agent_info, get_team_members, send_message_to_agent],
         )
 
-        system_prompt = f"{self.agent_definition}\n\nYou are part of a team of AI agents. You can communicate with other team members using the A2A protocol. Be helpful, collaborative, and work together with your team."
+        teammates = ", ".join(n for n in self.team_configs if n != self.config.name)
+        system_prompt = (
+            f"{self.agent_definition}\n\n"
+            f"You are part of a team of AI agents. Your teammates are: {teammates}. "
+            f"Use the send_message_to_agent tool to ask them for help or delegate tasks."
+        )
 
         options = ClaudeAgentOptions(
             mcp_servers={"tools": server},
             allowed_tools=[
                 "mcp__tools__get_agent_info",
                 "mcp__tools__get_team_members",
+                "mcp__tools__send_message_to_agent",
             ],
             system_prompt=system_prompt,
             model=self.config.model,
@@ -128,9 +177,9 @@ class InlineAgentExecutor(AgentExecutor):
         pass
 
 
-def create_agent_server(config: AgentConfig):
+def create_agent_server(config: AgentConfig, team_configs: Dict[str, AgentConfig]):
     """Create A2A server for a specific agent with message capture"""
-    agent_executor = InlineAgentExecutor(config)
+    agent_executor = InlineAgentExecutor(config, team_configs)
 
     skill = AgentSkill(
         id="team_collaboration",
@@ -184,8 +233,9 @@ def create_agent_server(config: AgentConfig):
 class AgentProcess:
     """Represents a running agent process"""
 
-    def __init__(self, config: AgentConfig):
+    def __init__(self, config: AgentConfig, team_configs: Dict[str, AgentConfig]):
         self.config = config
+        self.team_configs = team_configs
         self.process: Optional[subprocess.Popen] = None
         self.task: Optional[asyncio.Task] = None
         self.is_running = False
@@ -194,7 +244,7 @@ class AgentProcess:
         """Start the agent process using inline logic"""
         try:
             # Create agent server with message capture
-            app = create_agent_server(self.config)
+            app = create_agent_server(self.config, self.team_configs)
 
             # Start server in background task
             self.task = asyncio.create_task(self._run_server(app))
@@ -276,7 +326,7 @@ class AgentSpawner:
 
         success_count = 0
         for agent_name, config in agent_configs.items():
-            agent_process = AgentProcess(config)
+            agent_process = AgentProcess(config, agent_configs)
             if await agent_process.start():
                 self.agent_processes[agent_name] = agent_process
                 success_count += 1
@@ -333,7 +383,8 @@ class AgentSpawner:
             print(f"❌ Agent {agent_name} not found")
             return False
 
-        agent_process = AgentProcess(config)
+        all_configs = self.team_manager.get_agent_configs()
+        agent_process = AgentProcess(config, all_configs)
         if await agent_process.start():
             self.agent_processes[agent_name] = agent_process
             return True
