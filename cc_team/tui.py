@@ -4,6 +4,7 @@ Each agent gets a full-height vertical pane side by side.
 """
 
 import json
+import uuid
 from datetime import datetime
 from pathlib import Path
 from typing import Optional, Dict
@@ -63,12 +64,13 @@ class AgentPanel(Vertical):
     }
     """
 
-    def __init__(self, agent_name: str, host: str, port: int, spawner: AgentSpawner):
+    def __init__(self, agent_name: str, host: str, port: int, spawner: AgentSpawner, model: Optional[str] = None):
         super().__init__()
         self.agent_name = agent_name
         self.host = host
         self.port = port
         self.spawner = spawner
+        self.model = model
         self._log_widget: Optional[RichLog] = None
         self._agent_running = False
         self._newest_ts: float = 0.0  # track newest message timestamp (bug 2)
@@ -89,11 +91,19 @@ class AgentPanel(Vertical):
         "[#d4682a]   █   █   [/]",
     )
 
+    @staticmethod
+    def _short_model(model: Optional[str]) -> str:
+        """Strip 'claude-' prefix for compact display."""
+        if not model:
+            return ""
+        return model.removeprefix("claude-")
+
     def _make_header(self) -> str:
         dot = "[bold green]●[/bold green]" if self._agent_running else "[dim]○[/dim]"
         port_info = f"[dim]:{self.port}[/dim]"
+        model_info = f"  [dim italic]{self._short_model(self.model)}[/dim italic]" if self.model else ""
         art = "\n".join(self._CLAUDE_ART)
-        return f"{art}\n {dot} [bold]{self.agent_name}[/bold]{port_info}"
+        return f"{art}\n {dot} [bold]{self.agent_name}[/bold]{port_info}{model_info}"
 
     def update_header(self) -> None:
         self.query_one("#panel-header", Static).update(self._make_header())
@@ -171,7 +181,7 @@ class AgentPanel(Vertical):
 class TeamTUI(App):
     """Team monitoring dashboard — agents as vertical panes."""
 
-    TITLE = "TeamTUI"
+    TITLE = "CC-Team"
     BINDINGS = [
         Binding("q", "quit", "Quit"),
         Binding("ctrl+a", "start_all", "Start All"),
@@ -196,6 +206,7 @@ class TeamTUI(App):
     def __init__(self, team_dir: Path):
         super().__init__()
         self.team_dir = Path(team_dir)
+        self.session_id = uuid.uuid4().hex[:8]
         self.team_manager: Optional[TeamManager] = None
         self.spawner: Optional[AgentSpawner] = None
         self.agent_panels: Dict[str, AgentPanel] = {}
@@ -207,7 +218,7 @@ class TeamTUI(App):
         yield Footer()
 
     async def on_mount(self) -> None:
-        self.title = f"TeamTUI — {self.team_dir.name}"
+        self.title = f"CC-Team {self.session_id}"
 
         self.team_manager = TeamManager(self.team_dir)
         self.team_manager.parse_team_structure()
@@ -218,7 +229,7 @@ class TeamTUI(App):
 
         for name in agent_names:
             cfg = self.team_manager.get_agent_config(name)
-            panel = AgentPanel(name, cfg.host, cfg.port, self.spawner)
+            panel = AgentPanel(name, cfg.host, cfg.port, self.spawner, cfg.model)
             self.agent_panels[name] = panel
             await container.mount(panel)
 
