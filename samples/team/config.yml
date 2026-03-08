@@ -9,12 +9,13 @@ agents:
     host: localhost
     port: 8001
     description: "Tom - The technical specialist who handles coding and system architecture"
-    model: claude-opus-4-6  # override: use most capable model for this agent
+    model: claude-haiku-4-5-20251001
   
   jerry:
     host: localhost
     port: 8002
     description: "Jerry - The research analyst who gathers information and provides insights"
+    model: claude-haiku-4-5-20251001
   
   alice:
     host: localhost
