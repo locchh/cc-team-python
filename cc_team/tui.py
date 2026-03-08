@@ -71,7 +71,7 @@ class AgentPanel(Vertical):
         self.spawner = spawner
         self._log_widget: Optional[RichLog] = None
         self._agent_running = False
-        self.last_message_count = 0
+        self._newest_ts: float = 0.0  # track newest message timestamp (bug 2)
 
     def compose(self) -> ComposeResult:
         yield Static(self._make_header(), id="panel-header")
@@ -103,15 +103,16 @@ class AgentPanel(Vertical):
             return
 
         capture = get_global_message_capture()
+        # newest-first from get_messages; reversed() below makes oldest-first for display
         messages = await capture.get_messages(agent_name=self.agent_name, limit=50)
 
-        if len(messages) == self.last_message_count:
+        if not messages or messages[0].timestamp == self._newest_ts:
             return
 
-        self.last_message_count = len(messages)
+        self._newest_ts = messages[0].timestamp
         self._log_widget.clear()
 
-        for msg in reversed(messages):
+        for msg in reversed(messages):  # oldest-first for chronological display
             self._render_message(msg)
 
     def _render_message(self, msg: CapturedMessage) -> None:
@@ -162,7 +163,8 @@ class AgentPanel(Vertical):
     def update_status(self, is_running: bool) -> None:
         self._agent_running = is_running
         self.update_header()
-        self.remove_class("running", "stopped", "focused")
+        # Only toggle running/stopped — never touch focused (bug 1)
+        self.remove_class("running", "stopped")
         self.add_class("running" if is_running else "stopped")
 
 
@@ -268,8 +270,8 @@ class TeamTUI(App):
         names = sorted(self.agent_panels.keys())
         if not names:
             return
-        # Remove focused style from current
-        if self.focused_agent in self.agent_panels:
+        # Remove focused style from current (bug 3: guard against None / stale key)
+        if self.focused_agent and self.focused_agent in self.agent_panels:
             self.agent_panels[self.focused_agent].remove_class("focused")
         idx = names.index(self.focused_agent) if self.focused_agent in names else 0
         self.focused_agent = names[(idx + 1) % len(names)]

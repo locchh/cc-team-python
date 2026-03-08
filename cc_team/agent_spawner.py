@@ -17,7 +17,7 @@ from a2a.server.tasks import InMemoryTaskStore
 from a2a.types import AgentCapabilities, AgentCard, AgentSkill
 from a2a.utils import new_agent_text_message
 from dotenv import load_dotenv
-from .message_capture import get_global_message_capture, MessageCaptureMiddleware
+from .message_capture import get_global_message_capture, MessageCaptureMiddleware, MessageType
 
 # Claude SDK imports
 from claude_agent_sdk import ClaudeAgentOptions, ClaudeSDKClient
@@ -89,11 +89,11 @@ class InlineAgentExecutor(AgentExecutor):
 
         prompt = context.get_user_input()
 
+        response_text = ""
         try:
             async with self.claude_client:
                 await self.claude_client.query(prompt)
 
-                response_text = ""
                 async for msg in self.claude_client.receive_response():
                     if hasattr(msg, "content"):
                         for block in msg.content:
@@ -105,12 +105,15 @@ class InlineAgentExecutor(AgentExecutor):
             print(f"❌ Claude SDK error for agent {self.config.name}: {e}")
             response_text = f"Error processing request: {e}"
 
-        # Capture actual response text into MessageCapture
-        from .message_capture import get_global_message_capture, MessageType as MT
+        # Bug 5: fall back so clients never get a silent blank response
+        if not response_text:
+            response_text = "[No response]"
+
+        # Capture actual response text (bug 4: use module-level import)
         await get_global_message_capture().capture(
             agent_name=self.config.name,
             direction="outgoing",
-            message_type=MT.AGENT_RESPONSE,
+            message_type=MessageType.AGENT_RESPONSE,
             content=response_text,
         )
 
@@ -192,6 +195,10 @@ class AgentProcess:
             # Start server in background task
             self.task = asyncio.create_task(self._run_server(app))
 
+            # Yield to event loop so uvicorn starts binding before we report running (bug 6)
+            await asyncio.sleep(0.1)
+            if self.task.done():
+                return False  # failed immediately (e.g. port in use)
             self.is_running = True
             print(
                 f"🚀 Started agent {self.config.name} on {self.config.host}:{self.config.port}"
