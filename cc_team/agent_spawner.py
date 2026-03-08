@@ -77,6 +77,7 @@ class InlineAgentExecutor(AgentExecutor):
                 "mcp__tools__get_team_members",
             ],
             system_prompt=system_prompt,
+            model=self.config.model,
         )
 
         self.claude_client = ClaudeSDKClient(options=options)
