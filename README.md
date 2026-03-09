@@ -14,7 +14,7 @@
 
 ```bash
 # Run directly from GitHub (no install needed)
-uvx --from git+https://github.com/locchh/snx cc-team run /path/to/your/team
+uvx --from git+https://github.com/locchh/cc-team-python cc-team run /path/to/your/team
 
 # Or install locally
 uv pip install -e .
