@@ -215,3 +215,6 @@ settings.local.*
 .env.development
 .env.test
 .env.production
+
+# UV
+uv.lock
