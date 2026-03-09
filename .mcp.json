@@ -1,8 +1,8 @@
 {
   "mcpServers": {
     "a2a": {
-      "command": "uvx",
-      "args": ["--from", "git+https://github.com/locchh/A2A-MCP-Server", "a2a-mcp-server"]
+      "command": "/home/locch/Works/A2A-MCP-Server/.venv/bin/python",
+      "args": ["/home/locch/Works/A2A-MCP-Server/a2a_mcp_server.py"]
     }
   }
 }
